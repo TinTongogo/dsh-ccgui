@@ -8,10 +8,13 @@ import type {
   SessionUpdate,
   StopReason,
 } from '@agentclientprotocol/sdk'
-import type { AcpTransport, SessionInfo, TransportHandlers } from '../../src/transport.ts'
+import type { AcpTransport, PromptOutcome, SessionInfo, TransportHandlers } from '../../src/transport.ts'
 
-/** Script for one `session/prompt`: drive the fake, then return the stop reason. */
-export type PromptScript = (fake: FakeTransport) => Promise<StopReason> | StopReason
+/** Script for one `session/prompt`: drive the fake, then return the stop reason, with usage if it matters. */
+export type PromptScript = (fake: FakeTransport) => Promise<StopReason | PromptOutcome> | StopReason | PromptOutcome
+
+const toOutcome = (result: StopReason | PromptOutcome): PromptOutcome =>
+  typeof result === 'string' ? { stopReason: result } : result
 
 /** In-memory transport whose prompts are driven by per-test scripts. */
 export class FakeTransport implements AcpTransport {
@@ -94,18 +97,20 @@ export class FakeTransport implements AcpTransport {
     return this.discardError === undefined ? Promise.resolve() : Promise.reject(this.discardError)
   }
 
-  prompt(sessionId: string, blocks: readonly ContentBlock[]): Promise<StopReason> {
+  prompt(sessionId: string, blocks: readonly ContentBlock[]): Promise<PromptOutcome> {
     this.operations.push('prompt')
     this.promptSessions.push(sessionId)
     this.prompts.push(blocks)
     const [script, ...rest] = this.scripts
     this.scripts = rest
     if (script === undefined) throw new Error('FakeTransport: no script for this prompt')
-    return new Promise<StopReason>((resolve, reject) => {
+    return new Promise<PromptOutcome>((resolve, reject) => {
       this.abortPrompt = reject
       void Promise.resolve()
         .then(() => script(this))
-        .then(resolve, reject)
+        .then((result) => {
+          resolve(toOutcome(result))
+        }, reject)
     })
   }
 

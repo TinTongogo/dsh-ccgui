@@ -11,6 +11,7 @@ import type {
   SessionConfigOption,
   SessionUpdate,
   StopReason,
+  Usage,
 } from '@agentclientprotocol/sdk'
 
 /** Callbacks from the CLI to its session. */
@@ -29,6 +30,13 @@ export interface SessionInfo {
   readonly configOptions?: readonly SessionConfigOption[] | null | undefined
 }
 
+/** How a CLI turn ended, as the CLI reported it. */
+export interface PromptOutcome {
+  readonly stopReason: StopReason
+  /** Token usage for the turn; many CLIs do not report it. */
+  readonly usage?: Usage | null | undefined
+}
+
 /** Client side of one ACP connection. */
 export interface AcpTransport {
   initialize(): Promise<InitializeResponse>
@@ -44,7 +52,7 @@ export interface AcpTransport {
   deleteSession(sessionId: string): Promise<void>
   closeSession(sessionId: string): Promise<void>
   /** Resolves when the whole CLI turn ends, however many tools it ran. */
-  prompt(sessionId: string, blocks: readonly ContentBlock[]): Promise<StopReason>
+  prompt(sessionId: string, blocks: readonly ContentBlock[]): Promise<PromptOutcome>
   cancel(sessionId: string): void
   /** Stops the CLI. `force` skips the wait for it to exit by itself. */
   dispose(force?: boolean): Promise<void>

@@ -8,6 +8,7 @@
 //   CRASH          exit with code 3
 //   WHICH MODEL    report the selected model
 //   anything else  echo the prompt
+// Every turn reports the same token usage, so the host shows speed and cache hits.
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
@@ -18,6 +19,7 @@ const capabilities = {
 }
 const sessions = new Map()
 let currentModel = 'fake-small'
+const TURN_USAGE = { totalTokens: 1200, inputTokens: 150, outputTokens: 50, cachedReadTokens: 1000 }
 const configOptions = () => [
   {
     id: 'model',
@@ -200,7 +202,7 @@ async function handleRequest({ id, method, params }) {
       return respond(id, {})
     case 'session/prompt': {
       const text = params.prompt.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join(' ')
-      return respond(id, { stopReason: await runPrompt(params.sessionId, text) })
+      return respond(id, { stopReason: await runPrompt(params.sessionId, text), usage: TURN_USAGE })
     }
     default:
       return send({ id, error: { code: -32601, message: `unknown method ${method}` } })

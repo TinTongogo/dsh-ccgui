@@ -4,13 +4,14 @@
  * @module dsh-ccgui/session/read-step
  */
 
-import type { StopReason } from '@agentclientprotocol/sdk'
-import type { LlmError, StreamChunk } from '@deepseek-ai/dsh-llm'
+import type { LlmError, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
 import { appendDelta, closeOpenBlock, EMPTY_BLOCKS } from '../stream-blocks.ts'
 import type { BlockState } from '../stream-blocks.ts'
 import type { ToolRecord } from '../tool-record.ts'
 import { toolCallStep, turnEndStep, turnFailure } from './outcomes.ts'
 import type { ReplayFields, StepResult } from './outcomes.ts'
+import { addUsage, toTokenUsage, withUsage } from './turn-usage.ts'
+import type { TurnEnd } from './turn-queue.ts'
 import type { SessionEvent } from './types.ts'
 
 /** What reading a step needs from its session. */
@@ -37,20 +38,29 @@ export interface StepSource {
  */
 export async function* readStep(source: StepSource, signal: AbortSignal | undefined): AsyncGenerator<StreamChunk> {
   let blocks = EMPTY_BLOCKS
+  // Steering can end several CLI turns inside one step; the step reports them all.
+  let usage: TokenUsage | undefined
   while (source.hasWork()) {
     const event = await source.nextEvent(signal)
     if (source.owesInput() && event.type === 'turn-end') continue
-    const step = applyEvent(source, blocks, event)
+    if (event.type === 'turn-end') usage = addUsage(usage, toTokenUsage(event.usage))
+    const step = applyEvent(source, blocks, event, usage)
     blocks = step.state
     yield* step.chunks
     if (step.done) return
   }
   if (source.owesInput()) throw source.failure() as LlmError
-  yield* closeOpenBlock(blocks).chunks
-  yield { type: 'finish', reason: { kind: 'stop' }, ...source.replay() }
+  const { state, chunks } = closeOpenBlock(blocks)
+  const finish: StreamChunk = { type: 'finish', reason: { kind: 'stop' }, ...source.replay() }
+  yield* withUsage({ state, chunks: [...chunks, finish], done: true }, usage).chunks
 }
 
-function applyEvent(source: StepSource, blocks: BlockState, event: SessionEvent): StepResult {
+function applyEvent(
+  source: StepSource,
+  blocks: BlockState,
+  event: SessionEvent,
+  usage: TokenUsage | undefined,
+): StepResult {
   switch (event.type) {
     case 'text':
     case 'reasoning':
@@ -62,14 +72,19 @@ function applyEvent(source: StepSource, blocks: BlockState, event: SessionEvent)
         : toolCallStep(blocks, record, source.replay())
     }
     case 'turn-end':
-      return applyTurnEnd(source, blocks, event.stopReason)
+      return applyTurnEnd(source, blocks, event, usage)
     case 'failure':
       throw turnFailure(event.error, source.label)
   }
 }
 
 /** Queued steering runs as the next CLI turn inside the same harness turn. */
-function applyTurnEnd(source: StepSource, blocks: BlockState, stopReason: StopReason): StepResult {
+function applyTurnEnd(
+  source: StepSource,
+  blocks: BlockState,
+  end: Extract<TurnEnd, { type: 'turn-end' }>,
+  usage: TokenUsage | undefined,
+): StepResult {
   if (source.hasWork()) return { state: blocks, chunks: [], done: false }
-  return turnEndStep(blocks, stopReason, source.label, source.replay())
+  return withUsage(turnEndStep(blocks, end.stopReason, source.label, source.replay()), usage)
 }

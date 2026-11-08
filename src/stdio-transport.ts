@@ -162,8 +162,8 @@ function sessionOperations(
       await untilClosed(agent.request(session.close, { sessionId }))
     },
     prompt: async (sessionId, blocks) => {
-      const { stopReason } = await untilClosed(agent.request(session.prompt, { sessionId, prompt: [...blocks] }))
-      return stopReason
+      const { stopReason, usage } = await untilClosed(agent.request(session.prompt, { sessionId, prompt: [...blocks] }))
+      return { stopReason, usage }
     },
     cancel: (sessionId) => {
       // Best effort: if the process is already gone, `closed` has reported it.
