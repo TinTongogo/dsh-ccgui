@@ -68,7 +68,7 @@ dsh plugin --profile web add dsh-ccgui@1.0.0
 
 ### 切换 CLI 和模型
 
-CLI 和模型各有一个菜单。模型菜单列出当前 CLI 真实可用的模型，第一项是它自己的默认模型，超过 4 项可搜索，中途换模型下一条消息生效。CLI 只能在发第一条消息前切换，要换就新建会话。
+CLI 和模型各有一个菜单。模型菜单列出当前 CLI 真实可用的模型，第一项是它自己的默认模型，超过 4 项可搜索，中途换模型下一条消息生效；CLI 报出同名的模型时，会在名字后面补上说明或 id 来区分。不在 CLI 上的会话（比如 DeepSeek），模型菜单只列 DeepSeek 等 DSH 自己的提供方、不列 CLI，旁边是推理等级。CLI 只能在发第一条消息前切换，要换就新建会话。
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./assets/illustrations/03-model-menu-dark.webp" />
@@ -212,7 +212,7 @@ OpenCode（项目的 `opencode.json`）：
 <details>
 <summary>更多限制</summary>
 
-- `/model` 命令和 DeepSeek 等提供方的模型菜单仍会列出所有提供方。不要用它们在同一会话里在 DeepSeek 和 CLI 之间切换：切到 CLI 时它没有之前的上下文，切出时压缩摘要可能失败。同一 CLI 内换模型没问题。
+- `/model` 命令仍会列出所有提供方，包括 CLI。不要用它在同一会话里在 DeepSeek 和 CLI 之间切换：切到 CLI 时它没有之前的上下文，切出时压缩摘要可能失败。同一 CLI 内换模型没问题。
 - 每次启动 DSH 后第一次用到某个 CLI，会短暂启动它询问模型。临时会话放在 DSH 主目录的 `ccgui/model-probe`；能删的会删掉，OMP 只支持关闭，每次会留下约 4KB 记录。
 - CLI 启动的时间上限是 `startTimeoutMs`，默认 120 秒。Claude Code 的适配器连同依赖约 400MB，实测第一次启动约 100 秒，网速慢时要先调大。
 - CodeBuddy CLI 要先登录或配好 API Key，否则提示 `Authentication required`。

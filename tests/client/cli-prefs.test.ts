@@ -94,7 +94,7 @@ describe('createCliPrefs', () => {
     const first = prefs.getSnapshot()
     prefs.remember([CLAUDE, DEEPSEEK])
     expect(prefs.getSnapshot()).toBe(first)
-    prefs.remember([{ id: 'cli-claude', label: 'Claude' }, CODEX])
+    prefs.remember([DEEPSEEK, { id: 'cli-claude', label: 'Claude' }, CODEX])
     expect(prefs.getSnapshot().known).toEqual([DEEPSEEK, { id: 'cli-claude', label: 'Claude' }, CODEX])
     expect(calls).toBe(2)
     expect(parseCliPrefs(storage.read(CLI_PREFS_STORAGE_KEY) ?? null)).toEqual(prefs.getSnapshot())
@@ -157,6 +157,29 @@ describe('createCliPrefs', () => {
     expect(prefs.getSnapshot().hidden).toEqual([])
   })
 
+  it('forgets a provider the switcher stops offering, keeping the stored order and choice', () => {
+    const prefs = createCliPrefs(memoryStorage())
+    prefs.remember([DEEPSEEK, CLAUDE, CODEX])
+    prefs.move('cli-codex', -1)
+    prefs.setEnabled('cli-claude', false)
+    prefs.remember([DEEPSEEK, CODEX])
+    expect(prefs.getSnapshot().known).toEqual([DEEPSEEK, CODEX])
+    expect(prefs.getSnapshot().order).toEqual(['deepseek-official', 'cli-codex', 'cli-claude'])
+    expect(prefs.getSnapshot().hidden).toEqual(['cli-claude'])
+    expect(listedEntries(prefs.getSnapshot()).map((entry) => entry.id)).toEqual(['deepseek-official', 'cli-codex'])
+    // The provider coming back carries the choice the user made before it left.
+    prefs.remember([DEEPSEEK, CLAUDE, CODEX])
+    expect(listedEntries(prefs.getSnapshot()).find((entry) => entry.id === 'cli-claude')?.enabled).toBe(false)
+  })
+
+  it('keeps the list while the switcher has not listed any provider', () => {
+    const prefs = createCliPrefs(memoryStorage())
+    prefs.remember([DEEPSEEK, CLAUDE])
+    const before = prefs.getSnapshot()
+    prefs.remember([])
+    expect(prefs.getSnapshot()).toBe(before)
+  })
+
   it('stops notifying after unsubscribe and survives storage that throws', () => {
     const prefs = createCliPrefs({
       getItem: () => {
@@ -172,7 +195,7 @@ describe('createCliPrefs', () => {
     })
     prefs.remember([CLAUDE])
     unsubscribe()
-    prefs.remember([CODEX])
+    prefs.remember([CLAUDE, CODEX])
     expect(calls).toBe(1)
     expect(prefs.getSnapshot().known).toEqual([CLAUDE, CODEX])
   })

@@ -5,14 +5,22 @@
 
 import { CLI_ROUTE_PREFIX, DEFAULT_MODEL_ID } from '../constants.ts'
 
+/** The reasoning levels a model offers, as the harness's catalog advertises them. */
+export interface DirectoryReasoning {
+  readonly efforts: readonly { readonly id: string; readonly name: string }[]
+  /** Absent when the provider picks the level itself. */
+  readonly defaultEffort?: string
+}
+
 /** One model in the model directory. */
-export interface DirectoryModel {
+interface DirectoryModel {
   readonly id: string
   readonly name: string
+  readonly reasoning?: DirectoryReasoning
 }
 
 /** One provider group in the model directory. */
-interface DirectoryGroup {
+export interface DirectoryGroup {
   readonly id: string
   readonly name: string
   readonly models: readonly DirectoryModel[]
@@ -22,6 +30,8 @@ interface DirectoryGroup {
 export interface DirectorySelection {
   readonly provider: string
   readonly model: string
+  /** Absent for the model's own default level. */
+  readonly reasoningEffort?: string
 }
 
 /** The fields of the model directory this switcher reads. */
@@ -30,6 +40,8 @@ export interface DirectoryState {
   readonly current: DirectorySelection | null
   /** The selection on its way to the harness, if any. */
   readonly pending?: DirectorySelection | null
+  /** The harness's catalog state; `loading` until the first catalog arrives. */
+  readonly status?: string
 }
 
 /** What the switcher renders. */

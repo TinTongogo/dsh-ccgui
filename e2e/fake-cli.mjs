@@ -48,11 +48,24 @@ await scenario('lazy: opening the app starts no CLI', async () => {
   if (running !== '') throw new Error(`already running: ${running}`)
 })
 
-// Also needs the fresh server, while the session is not on a CLI yet.
-await scenario("seat: a session not on a CLI keeps the harness's model control", async () => {
-  if ((await page.locator('.dsh-cli-model').count()) !== 0) throw new Error("the plugin's control is showing")
+// Also needs the fresh server, while the session is not on a CLI yet. The harness's seat
+// would list every CLI here too, which a started session cannot move to.
+await scenario("seat: a session not on a CLI lists the harness's providers, not the CLIs", async () => {
+  if ((await page.locator('.dsh-cli-model').count()) !== 1) throw new Error("the plugin's control is missing")
   const seats = await harnessSeatDisplays()
-  if (seats.length === 0 || seats.includes('none')) throw new Error(`harness seat: ${seats.join()}`)
+  if (!seats.every((display) => display === 'none')) throw new Error(`harness seat: ${seats.join()}`)
+  await modelTrigger().click()
+  await sleep(500)
+  // This home signs in to no provider, so the harness may have nothing of its own to list.
+  const headings = await page.locator('.dsh-cli-model-heading').allInnerTexts()
+  const rows = await page
+    .getByRole('menuitemradio')
+    .evaluateAll((items) => items.map((item) => item.getAttribute('title')))
+  await shot('model-menu-harness')
+  await page.keyboard.press('Escape')
+  await sleep(250)
+  if (headings.includes(FAKE) || rows.some((name) => name?.startsWith('Fake')))
+    throw new Error(`lists a CLI: ${headings.join()} / ${rows.join()}`)
 })
 
 await scenario('allow: permission gates the write, then the file appears', async () => {

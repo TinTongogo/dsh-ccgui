@@ -2,7 +2,8 @@
  * The user's order for the composer's CLI switcher and which providers it leaves out, edited
  * on the settings page. The harness only lists providers per session, so the switcher reports
  * the ones it sees and they are kept here; that is how the settings page knows what to list
- * even when no session is open.
+ * even when no session is open. A provider the switcher stops reporting is forgotten, so a CLI
+ * taken out of the plugin's configuration leaves the settings page with it.
  * @module dsh-ccgui/client/cli-prefs
  */
 
@@ -21,11 +22,11 @@ export interface CliEntry extends CliChoice {
 }
 
 export interface CliPrefsSnapshot {
-  /** Every provider the switcher has shown, in the order first seen. */
+  /** The providers the switcher currently offers, in the order first seen. */
   readonly known: readonly CliChoice[]
   /** Ids in the user's order; providers missing here follow in the directory's order. */
   readonly order: readonly string[]
-  /** Ids left out of the switcher. */
+  /** Ids left out of the switcher; kept for a provider that is not offered right now. */
   readonly hidden: readonly string[]
 }
 
@@ -36,7 +37,7 @@ export interface CliPrefsStorage {
 }
 
 export interface CliPrefs extends Store<CliPrefsSnapshot> {
-  /** Record the providers a switcher was given. */
+  /** Record the providers a switcher was given, forgetting those it no longer offers. */
   remember(choices: readonly CliChoice[]): void
   /** Move a provider one place up (-1) or down (1) in the settings list. */
   move(id: string, delta: -1 | 1): void
@@ -123,7 +124,7 @@ export function arrangeChoices<T extends CliChoice>(items: readonly T[], prefs: 
 
 /**
  * @param prefs - the preferences.
- * @returns every known provider in the user's order, with whether the switcher shows it.
+ * @returns every offered provider in the user's order, with whether the switcher shows it.
  */
 export function listedEntries(prefs: CliPrefsSnapshot): readonly CliEntry[] {
   return sortByOrder(prefs.known, prefs.order).map((choice) => ({
@@ -133,11 +134,19 @@ export function listedEntries(prefs: CliPrefsSnapshot): readonly CliEntry[] {
 }
 
 function rememberChoices(prefs: CliPrefsSnapshot, seen: readonly CliChoice[]): CliPrefsSnapshot {
-  const renamed = prefs.known.map((known) => seen.find((choice) => choice.id === known.id) ?? known)
-  const added = seen.filter((choice) => !prefs.known.some((known) => known.id === choice.id))
-  const changed = added.length > 0 || renamed.some((choice, index) => choice.label !== prefs.known[index]?.label)
-  if (!changed) return prefs
-  const startHidden = added.map((choice) => choice.id).filter((id) => HIDDEN_BY_DEFAULT.has(id))
+  // A switcher renders before the harness has listed any provider. An empty report cannot
+  // tell "this deployment has none" from "not loaded yet", so it must not clear the list.
+  if (seen.length === 0) return prefs
+  const offered = new Set(seen.map((choice) => choice.id))
+  // A CLI removed from the plugin's agents keeps no row in settings. Its order and hidden
+  // choice stay stored, so putting it back restores what the user had set before.
+  const known = prefs.known.filter((choice) => offered.has(choice.id))
+  const renamed = known.map((choice) => seen.find((candidate) => candidate.id === choice.id) ?? choice)
+  const added = seen.filter((choice) => !known.some((candidate) => candidate.id === choice.id))
+  const dropped = known.length !== prefs.known.length
+  const relabelled = renamed.some((choice, index) => choice.label !== prefs.known[index]?.label)
+  if (!dropped && added.length === 0 && !relabelled) return prefs
+  const startHidden = added.filter((choice) => HIDDEN_BY_DEFAULT.has(choice.id)).map((choice) => choice.id)
   const hidden = [...prefs.hidden, ...startHidden.filter((id) => !prefs.hidden.includes(id))]
   return { ...prefs, known: [...renamed, ...added], hidden }
 }

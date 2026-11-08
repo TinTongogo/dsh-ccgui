@@ -20,7 +20,13 @@ export interface CliModelList {
   readonly options: readonly CliModelOption[]
 }
 
+/** An entry as read, before names it shares with others are told apart. */
+interface ReadEntry extends CliModelOption {
+  readonly description: string | undefined
+}
+
 const CONVENTIONAL_MODEL_OPTION_ID = 'model'
+const NAME_SEPARATOR = ' · '
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
 const isText = (value: unknown): value is string => typeof value === 'string' && value.length > 0
@@ -37,10 +43,29 @@ function flattenEntries(entries: unknown): readonly unknown[] {
  * A CLI's own default entry can be named for its role, "Default (recommended)", with only the
  * description saying which model that is. The menu names the model, as it does for other CLIs.
  */
-function readEntry(entry: unknown): readonly CliModelOption[] {
+function readEntry(entry: unknown): readonly ReadEntry[] {
   if (!isObject(entry) || !isText(entry.value)) return []
   const name = entry.value === DEFAULT_MODEL_ID && isText(entry.description) ? entry.description : entry.name
-  return [{ value: entry.value, name: isText(name) ? name : entry.value }]
+  const description = isText(entry.description) ? entry.description : undefined
+  return [{ value: entry.value, name: isText(name) ? name : entry.value, description }]
+}
+
+/**
+ * A CLI can list several models under one name, CodeBuddy's free and paid tiers of Hy4 among
+ * them, which would leave rows nobody can tell apart. Such names gain what does tell them apart:
+ * the descriptions when those differ, otherwise the ids. The default entry is left alone, as the
+ * catalog labels it on its own and it is expected to share its model's name.
+ */
+function distinguishNames(entries: readonly ReadEntry[]): readonly CliModelOption[] {
+  const named = entries.filter(({ value }) => value !== DEFAULT_MODEL_ID)
+  const peersOf = (name: string): readonly ReadEntry[] => named.filter((entry) => entry.name === name)
+  return entries.map(({ value, name, description }) => {
+    const peers = peersOf(name)
+    if (value === DEFAULT_MODEL_ID || peers.length < 2) return { value, name }
+    const descriptions = new Set(peers.map((peer) => peer.description))
+    const byDescription = descriptions.size === peers.length && !descriptions.has(undefined)
+    return { value, name: `${name}${NAME_SEPARATOR}${(byDescription ? description : undefined) ?? value}` }
+  })
 }
 
 /**
@@ -61,6 +86,6 @@ export function readModelList(
     selects.find((candidate) => candidate.category === 'model') ??
     selects.find((candidate) => candidate.category == null && candidate.id === CONVENTIONAL_MODEL_OPTION_ID)
   if (option === undefined || !isText(option.id) || !isText(option.currentValue)) return undefined
-  const options = flattenEntries(option.options).flatMap(readEntry)
+  const options = distinguishNames(flattenEntries(option.options).flatMap(readEntry))
   return options.length === 0 ? undefined : { configId: option.id, current: option.currentValue, options }
 }

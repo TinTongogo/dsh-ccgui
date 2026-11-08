@@ -73,6 +73,47 @@ describe('readModelList', () => {
     ])
   })
 
+  // Recorded from CodeBuddy: two tiers of one model share a name, and only the price tells them apart.
+  it('tells apart models that share a name by their descriptions', () => {
+    const options = [
+      { value: 'hy4free', name: 'Hy4', description: 'x0.00 credits' },
+      { value: 'hy4std', name: 'Hy4', description: 'x0.29 credits' },
+      { value: 'glm', name: 'GLM', description: 'x0.69 credits' },
+    ]
+    expect(readModelList([select({ category: 'model', currentValue: 'hy4free', options })])?.options).toEqual([
+      { value: 'hy4free', name: 'Hy4 · x0.00 credits' },
+      { value: 'hy4std', name: 'Hy4 · x0.29 credits' },
+      { value: 'glm', name: 'GLM' },
+    ])
+  })
+
+  it('falls back to the ids when the descriptions do not tell them apart', () => {
+    const options = [
+      { value: 'hy3', name: 'Hy3', description: 'same' },
+      { value: 'hy3-x', name: 'Hy3', description: 'same' },
+      { value: 'k', name: 'K' },
+      { value: 'k-fast', name: 'K' },
+    ]
+    expect(readModelList([select({ category: 'model', currentValue: 'hy3', options })])?.options).toEqual([
+      { value: 'hy3', name: 'Hy3 · hy3' },
+      { value: 'hy3-x', name: 'Hy3 · hy3-x' },
+      { value: 'k', name: 'K · k' },
+      { value: 'k-fast', name: 'K · k-fast' },
+    ])
+  })
+
+  // The menu labels the default entry on its own, so sharing a name with its model is expected.
+  it('leaves a default entry that names the model it stands for', () => {
+    const options = [
+      { value: 'default', name: 'Default', description: 'Opus 5.5' },
+      { value: 'opus', name: 'Opus 5.5', description: 'Most capable' },
+    ]
+    expect(readModelList([select({ category: 'model', currentValue: 'default', options })])?.options).toEqual([
+      { value: 'default', name: 'Opus 5.5' },
+      { value: 'opus', name: 'Opus 5.5' },
+    ])
+  })
+
   it('ignores options that are not selects', () => {
     const toggle = { id: 'model', name: 'Model', type: 'boolean', currentValue: true } as unknown as SessionConfigOption
     expect(readModelList([toggle])).toBeUndefined()
