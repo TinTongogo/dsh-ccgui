@@ -1,0 +1,6 @@
+lib
+coverage
+reports
+.stryker-tmp
+pnpm-lock.yaml
+*.md

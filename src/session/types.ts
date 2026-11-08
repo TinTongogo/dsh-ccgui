@@ -1,0 +1,59 @@
+/**
+ * The contract of a CLI session: what it is built from, what one harness step asks of it,
+ * and the events its reader consumes.
+ * @module dsh-ccgui/session/types
+ */
+
+import type { RequestMessage } from '@deepseek-ai/dsh-llm'
+import type { CliModelList } from '../model-options.ts'
+import type { ReadImage } from '../prompt-images.ts'
+import type { AcpTransport, TransportHandlers } from '../transport.ts'
+import type { TurnEnd } from './turn-queue.ts'
+
+/** Construction inputs for one CLI session. */
+export interface CliSessionOptions {
+  readonly dshSessionId: string
+  /** The provider route of this CLI, which tells its native sessions from another CLI's. */
+  readonly provider: string
+  readonly cwd: string
+  /** CLI display name used in user-facing messages. */
+  readonly label: string
+  /** Opens the connection on first use. */
+  readonly openTransport: (handlers: TransportHandlers) => AcpTransport
+  readonly mintCallId?: () => string
+  /** How long a cancelled CLI may take to finish its turn before it is abandoned. */
+  readonly cancelGraceMs?: number
+  /** How long the CLI may take to accept a session, which must allow for a cold `npx` download. */
+  readonly startTimeoutMs?: number
+  /** How long a pending command's reports must stay quiet before it counts as started. */
+  readonly toolSettleMs?: number
+  /** What this CLI reported about its models when asked ahead of any session. */
+  readonly knownModels?: () => CliModelList | undefined
+  /** Reads pasted images from the harness; absent when it has no attachment service. */
+  readonly readImage?: ReadImage
+  /** Receives failures that have no caller left to reject. */
+  readonly onError?: (error: unknown) => void
+  /** User messages an earlier CLI process for this harness session received. */
+  readonly sentMessageIds?: ReadonlySet<string>
+  /**
+   * Settles once any earlier process for this harness session has stopped, because
+   * two CLIs must not work on one native session and working directory at once.
+   */
+  readonly after?: Promise<void>
+}
+
+/** One harness model request. */
+export interface StreamRequest {
+  readonly messages: readonly RequestMessage[]
+  /** Ids of the user messages in the open harness turn; omitted, every message qualifies. */
+  readonly currentTurnMessageIds?: ReadonlySet<string>
+  /** The model selected in the harness; omitted or `default` means the CLI's own. */
+  readonly model?: string
+  readonly signal?: AbortSignal
+}
+
+/** What the step reader consumes, in the order it happened. */
+export type SessionEvent =
+  | { readonly type: 'text' | 'reasoning'; readonly text: string }
+  | { readonly type: 'tool-ready'; readonly acpId: string }
+  | TurnEnd

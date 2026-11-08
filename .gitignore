@@ -1,0 +1,8 @@
+node_modules/
+lib/
+coverage/
+reports/
+.stryker-tmp/
+.ccgui
+docs
+.claude/scheduled_tasks.lock

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "packageRules": [
+    {
+      "description": "The host provides these at runtime; their ranges follow engines.dsh and are changed by hand.",
+      "matchPackageNames": ["@deepseek-ai/**"],
+      "enabled": false
+    },
+    {
+      "description": "TypeScript waits until typescript-eslint supports the next major.",
+      "matchPackageNames": ["typescript"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "description": "ACP adapters launched through npx: each bump changes how a CLI behaves, so one PR per adapter.",
+      "matchFileNames": ["cordis.patch.yml"],
+      "labels": ["cli-adapter"]
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Adapter versions pinned in npx args, e.g. '@agentclientprotocol/codex-acp@2.5.0'",
+      "managerFilePatterns": ["/^cordis\\.patch\\.yml$/"],
+      "matchStrings": ["'(?<depName>(?:@[\\w.-]+/)?[\\w.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+)'"],
+      "datasourceTemplate": "npm"
+    }
+  ]
+}
