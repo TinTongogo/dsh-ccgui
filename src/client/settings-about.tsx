@@ -1,6 +1,6 @@
 /**
  * The pills beside the settings page's title: the plugin's version and where to reach the
- * project (its WeChat group and CC GUI's repository), as CC GUI's own 社区与反馈 page does.
+ * project (its WeChat group and this plugin's repository), as CC GUI's own 社区与反馈 page does.
  * @module dsh-ccgui/client/settings-about
  */
 
@@ -13,7 +13,8 @@ declare const __DSH_CCGUI_VERSION__: string | undefined
 
 export const PLUGIN_VERSION: string = typeof __DSH_CCGUI_VERSION__ === 'string' ? __DSH_CCGUI_VERSION__ : '开发版'
 
-const REPO_URL = 'https://github.com/zhukunpenglinyutong/desktop-cc-gui'
+// This plugin's own repository, matching package.json's `repository` (a test keeps them in step).
+const REPO_URL = 'https://github.com/zhukunpenglinyutong/dsh-ccgui'
 const VERSION_LABEL = '版本'
 // A release reads as v0.3.0, like the harness's own 新版本 chip; the source run keeps its word.
 const VERSION_VALUE = /^\d/.test(PLUGIN_VERSION) ? `v${PLUGIN_VERSION}` : PLUGIN_VERSION

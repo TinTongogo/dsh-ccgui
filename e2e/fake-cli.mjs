@@ -431,6 +431,15 @@ await scenario('settings: the CLI list orders the switcher and hides what is swi
   const missingSwitch = page.getByRole('switch', { name: '启用 Missing CLI' })
   const rows = () =>
     page.locator('.dsh-ccgui-cli-prefs li').evaluateAll((items) => items.map((item) => item.getAttribute('aria-label')))
+  // CLIs can start switched off (CodeBuddy does), so the menu is what the switches leave on.
+  const shownRows = () =>
+    page
+      .locator('.dsh-ccgui-cli-prefs li')
+      .evaluateAll((items) =>
+        items
+          .filter((item) => item.querySelector('[role="switch"]')?.getAttribute('aria-checked') !== 'false')
+          .map((item) => item.getAttribute('aria-label')),
+      )
   const menuNames = async () => {
     await cliSwitcher().click()
     const items = page.getByRole('menuitemradio').or(page.getByRole('menuitem'))
@@ -450,14 +459,16 @@ await scenario('settings: the CLI list orders the switcher and hides what is swi
   await missingSwitch.click()
   const arranged = await rows()
   if (arranged.at(-2) !== lastName) throw new Error(`rows after moving: ${arranged.join()}`)
+  const expected = await shownRows()
+  if (expected.includes('Missing CLI')) throw new Error('Missing CLI is still switched on')
   await shot('settings-cli-list')
   await closeSettings()
+  let restored
   try {
     await newSession('标准模式')
     await until(() => cliSwitcher().isVisible(), 'CLI switcher')
     const shown = await menuNames()
     await shot('settings-cli-menu')
-    const expected = arranged.filter((name) => name !== 'Missing CLI')
     if (shown.join() !== expected.join()) throw new Error(`menu: ${shown.join()} (expected ${expected.join()})`)
   } finally {
     // Put things back, so later scenarios see the configured order and can pick Missing CLI.
@@ -465,9 +476,10 @@ await scenario('settings: the CLI list orders the switcher and hides what is swi
     await openSettings()
     await missingSwitch.click()
     await page.getByRole('button', { name: `下移 ${lastName}` }).click()
+    restored = await rows()
+    // Closed even when the check above failed, so the next scenario is not stuck behind the dialog.
+    await closeSettings()
   }
-  const restored = await rows()
-  await closeSettings()
   if (restored.join() !== before.join()) throw new Error('could not restore the order')
 })
 
