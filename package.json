@@ -1,7 +1,7 @@
 {
   "name": "dsh-ccgui",
   "version": "1.0.0",
-  "description": "CC GUI for DeepSeek Harness: run Claude Code, Codex CLI and other agent CLIs as first-class DSH sessions over the Agent Client Protocol.",
+  "description": "在 DeepSeek Harness 里直接使用 Claude Code、Codex、PI、OMP 等 Agent CLI",
   "icon": "./assets/logo.png",
   "license": "MIT",
   "repository": {

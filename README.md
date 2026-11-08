@@ -28,12 +28,6 @@
 
 需要 DSH `>=0.2.2-rc.1 <0.3.0`，以及已安装并登录的 CLI。
 
-| 功能 | Claude<br>Code | Codex<br>CLI | PI<br>CLI | OMP<br>CLI | Open<br>Code |
-| --- | :---: | :---: | :---: | :---: | :---: |
-| 真实账号验证 | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 免安装（`npx` 自动拉取） | ✅ | ✅ | ✅ | 先装 `omp` | 先装 `opencode` |
-| 会话中途换模型<br><sub>输入框右侧的模型菜单</sub> | ✅ | ✅ | ✅ | ✅ | ✅ |
-
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./assets/illustrations/02-install-dark.webp" />
   <img alt="在 DSH 的插件页点「添加插件」，对话框里输入 dsh-ccgui 后点「安装」" src="./assets/illustrations/02-install-light.webp" />
@@ -62,6 +56,13 @@ dsh plugin --profile web add dsh-ccgui@1.0.0
 > 从源码安装时先 `pnpm install && pnpm run build`，再在「添加插件」里填仓库的本地路径（命令行则把 `dsh-ccgui@1.0.0` 换成仓库路径）；pnpm 的 peerDependencies 警告可以忽略。
 
 <div align="right"><a href="#readme-top">返回顶部 ↑</a></div>
+
+
+| 功能 | Claude<br>Code | Codex<br>CLI | PI<br>CLI | OMP<br>CLI | Open<br>Code |
+| --- | :---: | :---: | :---: | :---: | :---: |
+| 真实账号验证 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 免安装（`npx` 自动拉取） | ✅ | ✅ | ✅ | 先装 `omp` | 先装 `opencode` |
+| 会话中途换模型<br><sub>输入框右侧的模型菜单</sub> | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ## 功能
 
