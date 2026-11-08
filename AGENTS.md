@@ -69,6 +69,16 @@ lint 强制的上限：源码单文件 500 行、测试单文件 800 行（都�
 
 只要 CLI 通过 ACP 通信，就不需要写针对它的代码。行为上的差异按行为处理（参考 `src/tool-record.ts` 对代码块外壳的处理），不要写 `if (cli === 'xxx')`。
 
+## 发版
+
+只在用户要求时发版。流程见 README「开发」一节的「发版」，要点：
+
+- 推送 `v*` 标签触发 `.github/workflows/release.yml`；合并到 main 不发版。
+- 在 main 上合并完成后运行 `npm version <patch|minor|major> -m "chore: release v%s"`，再 `git push --follow-tags`。不要手改版本号再单独打标签。
+- npm 通过 Trusted Publishing 认 `release.yml`，没有 `NPM_TOKEN`。不要把发布改回令牌，也不要改这个工作流的文件名（npm 那边按文件名绑定）。
+- 标签跑的是被打标签那个提交里的工作流文件，不要给工作流改动之前的提交补打标签。
+- 开发分支不要用 `v1.0.2` 这类和标签同名的名字。
+
 ## 常用命令
 
 | 命令 | 作用 |

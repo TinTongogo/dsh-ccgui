@@ -294,6 +294,30 @@ node e2e/fake-cli-resume.mjs
 
 </details>
 
+<details>
+<summary>发版</summary>
+
+推送 `v*` 标签才会发版，合并到 main 不会。标签推上去后，[Release 工作流](.github/workflows/release.yml)会跑 `pnpm check`、发布到 npm、创建 GitHub Release。npm 用 Trusted Publishing 认这个仓库的 `release.yml`，不需要令牌。
+
+```sh
+# 1. 在开发分支上开发，分支名不要和标签同名（用 dev/1.0.2，不用 v1.0.2）
+git checkout -b dev/1.0.2
+git push -u origin dev/1.0.2
+# 开 PR 合到 main，CI 通过后合并
+
+# 2. 合并后在 main 上发版
+git checkout main && git pull
+npm version patch -m "chore: release v%s"   # 修复用 patch，新功能用 minor，不兼容改动用 major
+git push --follow-tags
+```
+
+- `npm version` 会改 `package.json` 的版本号、提交并打标签，标签和版本号对不上时工作流会拒绝发布。
+- 不要在 GitHub 网页上用「Draft a new release」发版：工作流最后创建 Release 时会因为它已存在而失败。
+- npm 上发布过的版本号不能重发。某次发布中途失败，修好后重跑工作流即可，已在 npm 上的版本会跳过发布、只补建 Release。
+- 新版本在 npm 上可能先显示 Validating，自动审核通过后才能安装。
+
+</details>
+
 ## 贡献者
 
 <a href="https://github.com/zhukunpenglinyutong/dsh-ccgui/graphs/contributors">
