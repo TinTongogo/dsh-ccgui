@@ -3,7 +3,8 @@ on:
   push:
     tags: [v*]
 
-# contents writes the GitHub Release; id-token lets npm attach a provenance attestation.
+# contents writes the GitHub Release; id-token is the OIDC identity npm trusts for publishing
+# and for the provenance attestation.
 permissions:
   contents: write
   id-token: write
@@ -30,9 +31,28 @@ jobs:
       - name: Require the tag to match package.json
         run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
       - run: pnpm check
-      - run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # npm accepts a GitHub OIDC identity in place of a token (trusted publishing) from 11.5.1 on.
+      - name: Require an npm that supports trusted publishing
+        run: |
+          node -e '
+            const [major, minor, patch] = process.argv[1].split(".").map(Number)
+            const ok = major > 11 || (major === 11 && (minor > 5 || (minor === 5 && patch >= 1)))
+            if (!ok) throw new Error(`npm ${process.argv[1]} cannot publish without a token; 11.5.1 or later is needed`)
+          ' "$(npm --version)"
+      # A version already on npm cannot be published again, so re-running a release or tagging an
+      # earlier publish only creates the GitHub Release.
+      - name: Check whether this version is already on npm
+        id: published
+        run: |
+          if npm view "$(node -p 'require("./package.json").name')@${GITHUB_REF_NAME#v}" version > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      # No token: the package trusts this repository's release.yml on npm, and provenance is
+      # attached automatically.
+      - if: steps.published.outputs.exists == 'false'
+        run: npm publish --access public
       - run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
