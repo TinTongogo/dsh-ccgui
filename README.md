@@ -58,11 +58,11 @@ dsh plugin --profile web add dsh-ccgui@1.0.0
 <div align="right"><a href="#readme-top">返回顶部 ↑</a></div>
 
 
-| 功能 | Claude<br>Code | Codex<br>CLI | PI<br>CLI | OMP<br>CLI | Open<br>Code |
-| --- | :---: | :---: | :---: | :---: | :---: |
-| 真实账号验证 | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 免安装（`npx` 自动拉取） | ✅ | ✅ | ✅ | 先装 `omp` | 先装 `opencode` |
-| 会话中途换模型<br><sub>输入框右侧的模型菜单</sub> | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 功能 | Claude<br>Code | Kimi<br>CLI | Codex<br>CLI | PI<br>CLI | OMP<br>CLI | Open<br>Code |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: |
+| 真实账号验证 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 免安装（`npx` 自动拉取） | ✅ | ✅ | ✅ | ✅ | 先装 `omp` | 先装 `opencode` |
+| 会话中途换模型<br><sub>输入框右侧的模型菜单</sub> | ✅ | 尚未验证 | ✅ | ✅ | ✅ | ✅ |
 
 ## 功能
 
@@ -157,6 +157,7 @@ DSH 设置里的「CC GUI 设置」可以调整 CLI 菜单的顺序和开关，�
 | OMP CLI | 不询问，直接执行 | 回合结束 |
 | OpenCode | 按它的权限配置询问，走 DSH 审批卡片 | 命令结束 |
 | CodeBuddy CLI | 尚未验证 | 尚未验证 |
+| Kimi CLI | 尚未验证 | 尚未验证 |
 
 继续跑的后台命令在会话关闭时才结束。表中是默认配置下在一台机器上的实测结果，配置和版本不同结果也可能不同。
 
@@ -187,12 +188,13 @@ OpenCode（项目的 `opencode.json`）：
   config:
     agents:
       - { id: claude, name: Claude Code, command: npx, args: [-y, '@agentclientprotocol/claude-agent-acp@0.101.0'] }
+      - { id: kimi, name: Kimi CLI, command: npx, args: [-y, '@moonshot-ai/kimi-code@2.5.2', acp] }
       - { id: codex, name: Codex CLI, command: npx, args: [-y, '@agentclientprotocol/codex-acp@2.5.0'] }
       - { id: pi, name: PI CLI, command: npx, args: [-y, 'pi-acp@0.0.34'] }
       - { id: omp, name: OMP CLI, command: omp, args: [acp] }
       - { id: opencode, name: OpenCode, command: opencode, args: [acp] }
       - { id: codebuddy, name: CodeBuddy CLI, command: codebuddy, args: [--acp] }
-      - { id: kimi, name: Kimi, command: kimi, args: [acp] }
+      - { id: my-cli, name: My CLI, command: my-cli, args: [acp] }
 ```
 
 > [!TIP]
@@ -214,6 +216,7 @@ OpenCode（项目的 `opencode.json`）：
 - 每次启动 DSH 后第一次用到某个 CLI，会短暂启动它询问模型。临时会话放在 DSH 主目录的 `ccgui/model-probe`；能删的会删掉，OMP 只支持关闭，每次会留下约 4KB 记录。
 - CLI 启动的时间上限是 `startTimeoutMs`，默认 120 秒。Claude Code 的适配器连同依赖约 400MB，实测第一次启动约 100 秒，网速慢时要先调大。
 - CodeBuddy CLI 要先登录或配好 API Key，否则提示 `Authentication required`。
+- Kimi CLI 通过 `npx` 拉取 `@moonshot-ai/kimi-code`，需要 Node.js 22.19 或更高版本；要先在终端运行 `npx @moonshot-ai/kimi-code@2.5.2`（或已安装的 `kimi`），在里面用 `/login` 登录。
 - “默认”后面的模型名按用户级配置询问得到，项目配置（比如 `opencode.json`）指定了别的模型时名字可能对不上，但实际仍按 CLI 的设置走。
 - Codex 按停止后已启动的命令留在后台，DSH 退出时才清理，ACP 没有提供停止它们的办法。Claude Code 会把预计超过 10 分钟的命令放到后台，同样如此；它也拒绝单独的 `sleep`。
 - 失败那一轮的消息不会自动补发（见[工作原理](#工作原理)），需要重新发送。
@@ -283,6 +286,7 @@ E2E_CLI='PI CLI' E2E_CLI_ID=pi E2E_MODEL='deepseek/DeepSeek V4.1 Flash' node e2e
 E2E_CLI='OMP CLI' E2E_CLI_ID=omp node e2e/real-cli.mjs
 E2E_CLI=OpenCode E2E_CLI_ID=opencode E2E_MODEL='opencode/DeepSeek V4.1 Flash Free' node e2e/real-cli.mjs
 E2E_CLI='CodeBuddy CLI' E2E_CLI_ID=codebuddy node e2e/real-cli.mjs   # 要先登录
+E2E_CLI='Kimi CLI' E2E_CLI_ID=kimi node e2e/real-cli.mjs             # 要先登录
 
 # 停掉服务后重启，验证恢复会话、且不重放失败的消息：
 e2e/start-server.sh --keep &

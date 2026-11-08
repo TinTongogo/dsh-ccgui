@@ -55,6 +55,10 @@ cat > "$E2E_ROOT/e2e.patch.yml" <<YAML
         name: Claude Code
         command: npx
         args: [-y, '@agentclientprotocol/claude-agent-acp@0.101.0']
+      - id: kimi
+        name: Kimi CLI
+        command: npx
+        args: [-y, '@moonshot-ai/kimi-code@2.5.2', acp]
       - id: codex
         name: Codex CLI
         command: npx

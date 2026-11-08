@@ -150,6 +150,13 @@ describe('createCliPrefs', () => {
     expect(prefs.getSnapshot().hidden).toEqual([])
   })
 
+  // Kimi has been verified with a real account, so it shows from the start.
+  it('shows a verified CLI when first seen', () => {
+    const prefs = createCliPrefs(memoryStorage())
+    prefs.remember([DEEPSEEK, CLAUDE, { id: 'cli-kimi', label: 'Kimi CLI' }])
+    expect(prefs.getSnapshot().hidden).toEqual([])
+  })
+
   it('stops notifying after unsubscribe and survives storage that throws', () => {
     const prefs = createCliPrefs({
       getItem: () => {

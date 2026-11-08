@@ -10,6 +10,7 @@ describe('the default CLIs', () => {
     const patch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
     expect([...patch.matchAll(AGENT)].map(([, id, name]) => [id, name])).toEqual([
       ['claude', 'Claude Code'],
+      ['kimi', 'Kimi CLI'],
       ['codex', 'Codex CLI'],
       ['pi', 'PI CLI'],
       ['omp', 'OMP CLI'],
