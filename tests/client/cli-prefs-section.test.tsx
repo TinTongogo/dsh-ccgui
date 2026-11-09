@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /// <reference lib="dom" />
 
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { act, cleanup, render, screen, within } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createCliPrefs } from '../../src/client/cli-prefs.ts'
@@ -69,6 +69,19 @@ describe('CliPrefsSection', () => {
     await userEvent.click(screen.getByRole('button', { name: '下移 DeepSeek' }))
     expect(rowNames()).toEqual(['Codex CLI', 'DeepSeek', 'Claude Code'])
     expect(prefs.getSnapshot().order).toEqual(['cli-codex', 'deepseek-official', 'cli-claude'])
+  })
+
+  it('drops the row of a provider the switcher stops listing', () => {
+    const prefs = seeded()
+    render(<CliPrefsSection prefs={prefs} />)
+    expect(rowNames()).toEqual(['DeepSeek', 'Claude Code', 'Codex CLI'])
+    act(() => {
+      prefs.remember([
+        { id: 'deepseek-official', label: 'DeepSeek' },
+        { id: 'cli-claude', label: 'Claude Code' },
+      ])
+    })
+    expect(rowNames()).toEqual(['DeepSeek', 'Claude Code'])
   })
 
   it('shows the built-in provider without a switch', () => {

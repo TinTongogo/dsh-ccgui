@@ -96,17 +96,6 @@ afterEach(() => {
 })
 
 describe('CliModelMenu rendering', () => {
-  it('renders nothing for a session that is not on a CLI', () => {
-    const directory = createStore<DirectoryState>({
-      ...directoryState(),
-      current: { provider: 'deepseek-official', model: 'x' },
-    })
-    const { container } = render(
-      <CliModelMenu available directory={directory} load={vi.fn()} select={vi.fn()} session={undefined} />,
-    )
-    expect(container.innerHTML).toBe('')
-  })
-
   it('renders nothing for an addressed subagent', () => {
     const directory = createStore(directoryState())
     const { container } = render(

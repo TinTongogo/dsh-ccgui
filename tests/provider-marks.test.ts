@@ -9,6 +9,7 @@ describe('markOf', () => {
     ['cli-pi', 'pi'],
     ['cli-claude', 'claude'],
     ['cli-codebuddy', 'codebuddy'],
+    ['cli-kimi', 'kimi'],
     ['deepseek', 'deepseek'],
     ['my-deepseek-proxy', 'deepseek'],
   ])('gives %s its own mark', (provider, mark) => {
@@ -17,7 +18,7 @@ describe('markOf', () => {
 
   // A CLI someone configured themselves still reads as a CLI in the list.
   it('gives any other CLI the generic mark', () => {
-    expect(markOf('cli-kimi')).toBe('cli')
+    expect(markOf('cli-someone-elses')).toBe('cli')
   })
 
   // Claiming a brand for a provider nothing is known about would mislabel it.

@@ -9,7 +9,9 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent, MutableRefObject, RefObject } from 'react'
 import { isMobileDevice, observeComposition, rankByName } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { CliModels, DirectorySelection } from './choices.ts'
+import type { DirectorySelection } from './choices.ts'
+import { isRow, rowCount } from './menu-models.ts'
+import type { MenuModels, MenuRow, MenuSection } from './menu-models.ts'
 import { SEARCH_ABOVE } from './model-card.tsx'
 
 const UNKNOWN_ERROR_LABEL = '未知错误'
@@ -41,15 +43,20 @@ function useCloseOnOutsidePress(open: boolean, inside: readonly RefObject<HTMLEl
   }, [open])
 }
 
-function useMatchingRows(models: CliModels, query: string, highlight: number | null) {
-  const searchable = models.rows.length > SEARCH_ABOVE
-  const visible = useMemo(
-    () => rankByName(models.rows, searchable ? query.trim() : ''),
-    [models.rows, searchable, query],
+/** Search ranks within each provider, as the harness's menu does, and drops emptied sections. */
+function useMatchingRows(models: MenuModels, query: string, highlight: number | null) {
+  const searchable = rowCount(models.sections) > SEARCH_ABOVE
+  const sections: readonly MenuSection[] = useMemo(
+    () =>
+      models.sections
+        .map((section) => ({ ...section, rows: rankByName(section.rows, searchable ? query.trim() : '') }))
+        .filter((section) => section.rows.length > 0),
+    [models.sections, searchable, query],
   )
-  const currentIndex = visible.findIndex((model) => model.id === models.currentId)
+  const visible = useMemo(() => sections.flatMap((section) => section.rows), [sections])
+  const currentIndex = visible.findIndex((row) => isRow(row, models.current))
   const active = Math.min(highlight ?? Math.max(0, currentIndex), visible.length - 1)
-  return { searchable, visible, active }
+  return { searchable, sections, visible, active }
 }
 
 /** The search field keeps the keyboard while the arrows move the highlight through the rows. */
@@ -87,7 +94,7 @@ interface ModelFailure {
 }
 
 interface ChooseOptions {
-  readonly models: CliModels
+  readonly models: MenuModels
   readonly select: SelectModel
   readonly triggerRef: RefObject<HTMLButtonElement>
   readonly searchRef: RefObject<HTMLInputElement>
@@ -104,16 +111,16 @@ function useChooseModel({ models, select, triggerRef, searchRef, closings, close
     setFailure((previous) => ({ seq: (previous?.seq ?? 0) + 1, text }))
     if (!isMobileDevice()) searchRef.current?.focus()
   }
-  const choose = (modelId: string): void => {
+  const choose = (row: MenuRow): void => {
     setSettled(true)
-    if (modelId === models.currentId) {
+    if (isRow(row, models.current)) {
       close(true)
       return
     }
     const asked = closings.current
     // The rows disable while this settles, and a disabled row cannot keep the keyboard.
     triggerRef.current?.focus()
-    select({ provider: models.provider, model: modelId }).then(
+    select({ provider: row.provider, model: row.model }).then(
       (result) => {
         if (result.error !== undefined) fail(result.error.message ?? UNKNOWN_ERROR_LABEL)
         // Someone who moved on while this was out keeps their focus, and any menu reopened since.
@@ -149,7 +156,7 @@ function closeOnBlurOutside(
 
 /** What the model control is drawn from. */
 export interface ModelSeatProps {
-  readonly models: CliModels
+  readonly models: MenuModels
   readonly pending: DirectorySelection | null
   readonly locked: boolean
   readonly load: () => void
@@ -196,7 +203,7 @@ export function useModelSeat({ models, pending, locked, load, select }: ModelSea
   const { open, setOpen, query, setQuery, highlight, setHighlight, closings, close } = useMenuState(triggerRef)
   const id = useId()
   const showing = open && !locked
-  const { searchable, visible, active } = useMatchingRows(models, query, highlight)
+  const { searchable, sections, visible, active } = useMatchingRows(models, query, highlight)
   const composing = useCompositionGuard()
 
   const choosing = useChooseModel({ models, select, triggerRef, searchRef, closings, close })
@@ -208,9 +215,10 @@ export function useModelSeat({ models, pending, locked, load, select }: ModelSea
     const action = keyAction(event)
     if (action === undefined) return
     event.preventDefault()
+    const row = visible[active]
     if (action === 'close') close(true)
-    else if (pending !== null || visible.length === 0) return
-    else if (action === 'choose') choosing.choose(visible[active]?.id ?? '')
+    else if (pending !== null || row === undefined) return
+    else if (action === 'choose') choosing.choose(row)
     else setHighlight((active + action + visible.length) % visible.length)
   }
 
@@ -235,7 +243,7 @@ export function useModelSeat({ models, pending, locked, load, select }: ModelSea
     query,
     setQuery,
     setHighlight,
-    visible,
+    sections,
     active,
     ...refs,
     onKeyDown,

@@ -42,10 +42,10 @@
 
 ```sh
 # DSH 桌面版：先 Cmd+Q 完全退出，再用应用内置的 dsh 安装
-"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add dsh-ccgui@1.0.0
+"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add dsh-ccgui@1.0.2
 
 # DSH 命令行版（dsh web）
-dsh plugin --profile web add dsh-ccgui@1.0.0
+dsh plugin --profile web add dsh-ccgui@1.0.2
 ```
 
 卸载把 `add ...` 换成 `remove dsh-ccgui`。
@@ -53,22 +53,22 @@ dsh plugin --profile web add dsh-ccgui@1.0.0
 </details>
 
 > [!TIP]
-> 从源码安装时先 `pnpm install && pnpm run build`，再在「添加插件」里填仓库的本地路径（命令行则把 `dsh-ccgui@1.0.0` 换成仓库路径）；pnpm 的 peerDependencies 警告可以忽略。
+> 从源码安装时先 `pnpm install && pnpm run build`，再在「添加插件」里填仓库的本地路径（命令行则把 `dsh-ccgui@1.0.2` 换成仓库路径）；pnpm 的 peerDependencies 警告可以忽略。
 
 <div align="right"><a href="#readme-top">返回顶部 ↑</a></div>
 
 
-| 功能 | Claude<br>Code | Codex<br>CLI | PI<br>CLI | OMP<br>CLI | Open<br>Code |
-| --- | :---: | :---: | :---: | :---: | :---: |
-| 真实账号验证 | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 免安装（`npx` 自动拉取） | ✅ | ✅ | ✅ | 先装 `omp` | 先装 `opencode` |
-| 会话中途换模型<br><sub>输入框右侧的模型菜单</sub> | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 功能 | Claude<br>Code | Kimi<br>CLI | Codex<br>CLI | PI<br>CLI | OMP<br>CLI | Open<br>Code |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: |
+| 真实账号验证 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 免安装（`npx` 自动拉取） | ✅ | ✅ | ✅ | ✅ | 先装 `omp` | 先装 `opencode` |
+| 会话中途换模型<br><sub>输入框右侧的模型菜单</sub> | ✅ | 尚未验证 | ✅ | ✅ | ✅ | ✅ |
 
 ## 功能
 
 ### 切换 CLI 和模型
 
-CLI 和模型各有一个菜单。模型菜单列出当前 CLI 真实可用的模型，第一项是它自己的默认模型，超过 4 项可搜索，中途换模型下一条消息生效。CLI 只能在发第一条消息前切换，要换就新建会话。
+CLI 和模型各有一个菜单。模型菜单列出当前 CLI 真实可用的模型，第一项是它自己的默认模型，超过 4 项可搜索，中途换模型下一条消息生效；CLI 报出同名的模型时，会在名字后面补上说明或 id 来区分。不在 CLI 上的会话（比如 DeepSeek），模型菜单只列 DeepSeek 等 DSH 自己的提供方、不列 CLI，旁边是推理等级。CLI 只能在发第一条消息前切换，要换就新建会话。
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./assets/illustrations/03-model-menu-dark.webp" />
@@ -137,6 +137,7 @@ DSH 设置里的「CC GUI 设置」可以调整 CLI 菜单的顺序和开关，�
 - DeepSeek 是内置模型提供方，始终保留，不能关闭。关掉的 CLI 不再出现在菜单里，行内标出「已关闭」。
 - 「界面交互」页签可分别关闭：右侧栏默认打开工作区文件、会话顶部的终端按钮、启动脚本。
 - 「更多功能」页签列出还没开放的功能（会话自动命名、WorkTree、Git 信息自动生成、增强提示词、AI 账号限额提示），目前只有说明。
+- 「版本记录」页签一个版本一页，翻页查看每个版本改了什么，当前运行的版本会标出来。
 - CodeBuddy CLI 尚未用真实账号验证，默认关闭，需要时在这里打开。
 - 列出的 CLI 来自打开过的会话，第一次使用前先打开任一会话。
 
@@ -157,6 +158,7 @@ DSH 设置里的「CC GUI 设置」可以调整 CLI 菜单的顺序和开关，�
 | OMP CLI | 不询问，直接执行 | 回合结束 |
 | OpenCode | 按它的权限配置询问，走 DSH 审批卡片 | 命令结束 |
 | CodeBuddy CLI | 尚未验证 | 尚未验证 |
+| Kimi CLI | 尚未验证 | 尚未验证 |
 
 继续跑的后台命令在会话关闭时才结束。表中是默认配置下在一台机器上的实测结果，配置和版本不同结果也可能不同。
 
@@ -187,12 +189,13 @@ OpenCode（项目的 `opencode.json`）：
   config:
     agents:
       - { id: claude, name: Claude Code, command: npx, args: [-y, '@agentclientprotocol/claude-agent-acp@0.101.0'] }
+      - { id: kimi, name: Kimi CLI, command: npx, args: [-y, '@moonshot-ai/kimi-code@2.5.2', acp] }
       - { id: codex, name: Codex CLI, command: npx, args: [-y, '@agentclientprotocol/codex-acp@2.5.0'] }
       - { id: pi, name: PI CLI, command: npx, args: [-y, 'pi-acp@0.0.34'] }
       - { id: omp, name: OMP CLI, command: omp, args: [acp] }
       - { id: opencode, name: OpenCode, command: opencode, args: [acp] }
       - { id: codebuddy, name: CodeBuddy CLI, command: codebuddy, args: [--acp] }
-      - { id: kimi, name: Kimi, command: kimi, args: [acp] }
+      - { id: my-cli, name: My CLI, command: my-cli, args: [acp] }
 ```
 
 > [!TIP]
@@ -210,10 +213,11 @@ OpenCode（项目的 `opencode.json`）：
 <details>
 <summary>更多限制</summary>
 
-- `/model` 命令和 DeepSeek 等提供方的模型菜单仍会列出所有提供方。不要用它们在同一会话里在 DeepSeek 和 CLI 之间切换：切到 CLI 时它没有之前的上下文，切出时压缩摘要可能失败。同一 CLI 内换模型没问题。
+- `/model` 命令仍会列出所有提供方，包括 CLI。不要用它在同一会话里在 DeepSeek 和 CLI 之间切换：切到 CLI 时它没有之前的上下文，切出时压缩摘要可能失败。同一 CLI 内换模型没问题。
 - 每次启动 DSH 后第一次用到某个 CLI，会短暂启动它询问模型。临时会话放在 DSH 主目录的 `ccgui/model-probe`；能删的会删掉，OMP 只支持关闭，每次会留下约 4KB 记录。
 - CLI 启动的时间上限是 `startTimeoutMs`，默认 120 秒。Claude Code 的适配器连同依赖约 400MB，实测第一次启动约 100 秒，网速慢时要先调大。
 - CodeBuddy CLI 要先登录或配好 API Key，否则提示 `Authentication required`。
+- Kimi CLI 通过 `npx` 拉取 `@moonshot-ai/kimi-code`，需要 Node.js 22.19 或更高版本；要先在终端运行 `npx @moonshot-ai/kimi-code@2.5.2`（或已安装的 `kimi`），在里面用 `/login` 登录。
 - “默认”后面的模型名按用户级配置询问得到，项目配置（比如 `opencode.json`）指定了别的模型时名字可能对不上，但实际仍按 CLI 的设置走。
 - Codex 按停止后已启动的命令留在后台，DSH 退出时才清理，ACP 没有提供停止它们的办法。Claude Code 会把预计超过 10 分钟的命令放到后台，同样如此；它也拒绝单独的 `sleep`。
 - 失败那一轮的消息不会自动补发（见[工作原理](#工作原理)），需要重新发送。
@@ -233,6 +237,8 @@ CLI 注册为 DSH 的模型提供方，不需要改 agent loop。一轮 CLI 回�
 - Claude Code 不上报“运行中”。插件在命令的上报停下 1 秒后就显示它，否则长命令运行时界面一片空白。其他工具要等询问审批或完成时才显示，避免冻结一张没有 diff 的卡片。
 - 模型列表来自 ACP 的 `configOptions`。它只在会话上报告，所以第一次选中某个 CLI 时插件会开一个临时会话询问，不发消息、不调用模型，清理放在后台。没选过的 CLI 不会被启动。换模型在每轮开始前用 `session/set_config_option`。
 - 写死版本且已缓存的 `npx` 包直接运行；缓存不完整、版本不符、`.npmrc` 改过缓存目录或在 Windows 上时仍交给 `npx`。
+- Windows 上 DSH 不经过命令行启动进程，起不来 `npx`、`codebuddy` 这类 `.cmd` 包装脚本。插件按 `PATH` 和 `PATHEXT` 找到实际文件：`.exe` 直接运行，npm / pnpm 生成的 `.cmd` 读出它要运行的脚本和解释器（`node`，或 OMP CLI 这类包用的 `bun`），直接用解释器启动；解释器本身也是 `.cmd` 时会继续往下找。其他批处理脚本无法这样启动，需要把 `command` 配成 `.exe` 或脚本解释器的完整路径。
+- macOS 上从 Dock 打开的 DSH 只有系统默认的 `PATH`，看不到 nvm、fnm、Volta 装的 node，`npx` 系的 CLI 会以退出码 127 失败。插件启动时在后台向登录 shell 读一次 `PATH`；读到之前或读取失败时，在原 `PATH` 后补上 Homebrew、nvm、Volta、bun 等常见目录。agent 配置的 `env` 里写了 `PATH` 时以配置为准。
 - 权限请求转给 DSH 审批界面。CLI 的会话 ID 存在会话日志里，重启后优先用 `session/resume` 接回。
 - 一条用户消息最多发给 CLI 一次，重发可能让它重复做事，所以重试是关闭的。
 - DSH 这一轮一结束（包括在两步之间按停止），插件就取消 CLI 的回合并丢弃剩余输出。
@@ -283,6 +289,7 @@ E2E_CLI='PI CLI' E2E_CLI_ID=pi E2E_MODEL='deepseek/DeepSeek V4.1 Flash' node e2e
 E2E_CLI='OMP CLI' E2E_CLI_ID=omp node e2e/real-cli.mjs
 E2E_CLI=OpenCode E2E_CLI_ID=opencode E2E_MODEL='opencode/DeepSeek V4.1 Flash Free' node e2e/real-cli.mjs
 E2E_CLI='CodeBuddy CLI' E2E_CLI_ID=codebuddy node e2e/real-cli.mjs   # 要先登录
+E2E_CLI='Kimi CLI' E2E_CLI_ID=kimi node e2e/real-cli.mjs             # 要先登录
 
 # 停掉服务后重启，验证恢复会话、且不重放失败的消息：
 e2e/start-server.sh --keep &
@@ -291,6 +298,30 @@ node e2e/fake-cli-resume.mjs
 ```
 
 真实 CLI 的测试会在它们各自的历史里留下几条工作目录在 `/tmp` 下的会话。
+
+</details>
+
+<details>
+<summary>发版</summary>
+
+推送 `v*` 标签才会发版，合并到 main 不会。标签推上去后，[Release 工作流](.github/workflows/release.yml)会跑 `pnpm check`、发布到 npm、创建 GitHub Release。npm 用 Trusted Publishing 认这个仓库的 `release.yml`，不需要令牌。
+
+```sh
+# 1. 在开发分支上开发，分支名不要和标签同名（用 dev/1.0.2，不用 v1.0.2）
+git checkout -b dev/1.0.2
+git push -u origin dev/1.0.2
+# 开 PR 合到 main，CI 通过后合并
+
+# 2. 合并后在 main 上发版
+git checkout main && git pull
+npm version patch -m "chore: release v%s"   # 修复用 patch，新功能用 minor，不兼容改动用 major
+git push --follow-tags
+```
+
+- `npm version` 会改 `package.json` 的版本号、提交并打标签，标签和版本号对不上时工作流会拒绝发布。
+- 不要在 GitHub 网页上用「Draft a new release」发版：工作流最后创建 Release 时会因为它已存在而失败。
+- npm 上发布过的版本号不能重发。某次发布中途失败，修好后重跑工作流即可，已在 npm 上的版本会跳过发布、只补建 Release。
+- 新版本在 npm 上可能先显示 Validating，自动审核通过后才能安装。
 
 </details>
 

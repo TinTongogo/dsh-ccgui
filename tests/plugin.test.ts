@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import type * as Os from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Message } from '@deepseek-ai/cordis'
@@ -483,6 +483,28 @@ describe('CliBridge sessions', () => {
     openTurn(h, 'dsh-1', ['m1'])
     await collect(onlyAdapter(h).stream(request({ messages: [user('m1', 'hello')] })))
     expect(h.subprocess.spawned[0]?.spec.env).toMatchObject({ CLI_TOKEN: 'secret' })
+  })
+
+  it.runIf(process.platform !== 'win32')(
+    'gives the CLI a PATH that keeps what the harness has, for a node found only by the shell',
+    async () => {
+      const h = harness()
+      await start(h, { agents: [FAKE] })
+      addAgent(h)
+      openTurn(h, 'dsh-1', ['m1'])
+      await collect(onlyAdapter(h).stream(request({ messages: [user('m1', 'hello')] })))
+      const path = h.subprocess.spawned[0]?.spec.env?.PATH?.split(delimiter) ?? []
+      expect(path).toEqual(expect.arrayContaining((process.env.PATH ?? '').split(delimiter).filter(Boolean)))
+    },
+  )
+
+  it('keeps a PATH the CLI is configured with', async () => {
+    const h = harness()
+    await start(h, { agents: [{ ...FAKE, env: { PATH: '/configured' } }] })
+    addAgent(h)
+    openTurn(h, 'dsh-1', ['m1'])
+    await collect(onlyAdapter(h).stream(request({ messages: [user('m1', 'hello')] })))
+    expect(h.subprocess.spawned[0]?.spec.env?.PATH).toBe('/configured')
   })
 
   it('asks the approval service before the CLI may write, and mirrors the result', async () => {

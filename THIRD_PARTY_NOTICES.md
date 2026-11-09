@@ -38,7 +38,7 @@ license, and imply no endorsement.
 - Claude: [Anthropic's terms](https://code.claude.com/docs/en/legal-and-compliance) call for
   written permission to use its logo beyond naming Claude Code in plain text. No such
   permission has been confirmed. The license below covers only the SVG path.
-- OpenAI (shown for Codex), Claude, Pi, OpenCode, CodeBuddy and DeepSeek: the SVG paths from
+- OpenAI (shown for Codex), Claude, Pi, OpenCode, CodeBuddy, Kimi and DeepSeek: the SVG paths from
   [lobe-icons](https://github.com/lobehub/lobe-icons), under this license:
 
 MIT License

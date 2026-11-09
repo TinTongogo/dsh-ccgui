@@ -33,6 +33,8 @@ import type { GitConnection, GitWebServer } from './git/git-routes.ts'
 import { CliSessionRegistry } from './session-registry.ts'
 import type { CliAgentConfig, SessionStart } from './session-registry.ts'
 import { openStdioTransport } from './stdio-transport.ts'
+import { startOnWindows } from './windows-command.ts'
+import { LoginPath, diskDirs, runShell } from './login-path.ts'
 import type { AcpTransport, TransportHandlers } from './transport.ts'
 
 export type { CliAgentConfig } from './session-registry.ts'
@@ -101,12 +103,23 @@ export default class CliBridge extends Service {
   private readonly catalog: CliModelCatalog
   /** Ends any model probe still running when this plugin goes away. */
   private readonly probes = new AbortController()
+  private readonly loginPath: LoginPath
 
   constructor(
     ctx: Context,
     private readonly config: Config,
   ) {
     super(ctx, 'cliBridge')
+    this.loginPath = new LoginPath({
+      platform: process.platform,
+      env: process.env,
+      home: homedir(),
+      dirs: diskDirs,
+      run: runShell,
+      warn: (message) => ctx.logger.warn(message),
+    })
+    // Started first so the answer is likely in before the first CLI starts; until then the fallback holds.
+    void this.loginPath.load(this.probes.signal)
     this.registry = new CliSessionRegistry(config.agents, {
       getAgent: (sessionId) => ctx.agents.get(sessionId as SessionId),
       composedPreset: (agent) => ctx.get('agentPresets')?.composedPreset(agent.ctx),
@@ -232,13 +245,14 @@ export default class CliBridge extends Service {
   }
 
   private openTransport(agent: CliAgentConfig, cwd: string, handlers: TransportHandlers): AcpTransport {
-    const { argv, env } = startFromNpxCache(
-      { argv: [agent.command, ...agent.args], env: agent.env },
+    const fromCache = startFromNpxCache(
+      { argv: [agent.command, ...agent.args], env: this.loginPath.apply(agent.env) },
       {
         npxCache: npxCacheDir(process.env, homedir(), process.platform),
         path: process.env.PATH,
       },
     )
+    const { argv, env } = startOnWindows(fromCache, process.platform, process.env)
     return openStdioTransport(
       {
         argv,

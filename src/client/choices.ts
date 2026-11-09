@@ -5,14 +5,27 @@
 
 import { CLI_ROUTE_PREFIX, DEFAULT_MODEL_ID } from '../constants.ts'
 
+/** The provider that stands for the harness in the switcher when the catalog has it. */
+const OFFICIAL_PROVIDER_ID = 'deepseek-official'
+/** The switcher's one entry for everything the harness runs itself. */
+const HARNESS_LABEL = 'DeepSeek'
+
+/** The reasoning levels a model offers, as the harness's catalog advertises them. */
+export interface DirectoryReasoning {
+  readonly efforts: readonly { readonly id: string; readonly name: string }[]
+  /** Absent when the provider picks the level itself. */
+  readonly defaultEffort?: string
+}
+
 /** One model in the model directory. */
-export interface DirectoryModel {
+interface DirectoryModel {
   readonly id: string
   readonly name: string
+  readonly reasoning?: DirectoryReasoning
 }
 
 /** One provider group in the model directory. */
-interface DirectoryGroup {
+export interface DirectoryGroup {
   readonly id: string
   readonly name: string
   readonly models: readonly DirectoryModel[]
@@ -22,6 +35,8 @@ interface DirectoryGroup {
 export interface DirectorySelection {
   readonly provider: string
   readonly model: string
+  /** Absent for the model's own default level. */
+  readonly reasoningEffort?: string
 }
 
 /** The fields of the model directory this switcher reads. */
@@ -30,6 +45,8 @@ export interface DirectoryState {
   readonly current: DirectorySelection | null
   /** The selection on its way to the harness, if any. */
   readonly pending?: DirectorySelection | null
+  /** The harness's catalog state; `loading` until the first catalog arrives. */
+  readonly status?: string
 }
 
 /** What the switcher renders. */
@@ -71,18 +88,40 @@ export function cliModels({ groups, current }: DirectoryState): CliModels | unde
   }
 }
 
+const isCli = (id: string): boolean => id.startsWith(CLI_ROUTE_PREFIX)
+
 /**
- * List the providers to switch between.
+ * Pick the group that stands for the harness. The official route is built in, but a
+ * deployment can lack it, so any other provider the harness runs can take its place.
+ */
+function harnessGroup(groups: readonly DirectoryGroup[]): DirectoryGroup | undefined {
+  return groups.find((group) => group.id === OFFICIAL_PROVIDER_ID) ?? groups.find((group) => !isCli(group.id))
+}
+
+/**
+ * List the providers to switch between: every CLI, plus the harness as a single entry. The
+ * model menu already lists each provider the harness runs, including those a user adds in
+ * the harness's model settings, so listing them here too would only repeat it.
  * @param state - the session's model directory.
  * @returns the menu's rows and the current choice.
  */
 export function cliChoices({ groups, current }: DirectoryState): CliChoices {
+  const harness = harnessGroup(groups)
+  const harnessItem = harness === undefined ? undefined : { id: harness.id, label: HARNESS_LABEL }
+  // The harness entry takes the place of the first harness provider in the directory.
+  const firstHarness = groups.findIndex((group) => !isCli(group.id))
+  const items = groups.flatMap((group, index) => {
+    if (isCli(group.id)) return [{ id: group.id, label: group.name }]
+    return index === firstHarness && harnessItem !== undefined ? [harnessItem] : []
+  })
   const selected = groups.find((group) => group.id === current?.provider)
+  const shown =
+    selected === undefined || isCli(selected.id) ? selected && { id: selected.id, label: selected.name } : harnessItem
   return {
-    visible: groups.some((group) => group.id.startsWith(CLI_ROUTE_PREFIX)),
-    items: groups.map((group) => ({ id: group.id, label: group.name })),
-    currentId: selected?.id,
-    currentLabel: selected?.name,
+    visible: groups.some((group) => isCli(group.id)),
+    items,
+    currentId: shown?.id,
+    currentLabel: shown?.label,
   }
 }
 
@@ -98,6 +137,10 @@ export function selectionForChoice(
   provider: string,
 ): DirectorySelection | undefined {
   if (current?.provider === provider) return undefined
+  // The switcher's harness entry stands for every harness provider; on one already, the
+  // model menu is where to pick another.
+  const onHarness = groups.some((group) => group.id === current?.provider && !isCli(group.id))
+  if (onHarness && !isCli(provider)) return undefined
   const first = groups.find((group) => group.id === provider)?.models[0]
   if (first === undefined) return undefined
   return { provider, model: provider.startsWith(CLI_ROUTE_PREFIX) ? DEFAULT_MODEL_ID : first.id }

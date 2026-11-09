@@ -29,6 +29,7 @@ import { errorMessage } from './session/outcomes.ts'
 import type { ReplayFields } from './session/outcomes.ts'
 import { CANCELLED, PermissionQueue } from './session/permission-queue.ts'
 import { readStep } from './session/read-step.ts'
+import { startHint } from './session/start-hint.ts'
 import { ToolMirror } from './session/tool-mirror.ts'
 import { TurnQueue } from './session/turn-queue.ts'
 import type { CliSessionOptions, SessionEvent, StreamRequest } from './session/types.ts'
@@ -265,7 +266,7 @@ export class CliSession {
         this.disposeRequested && this.failure !== undefined
           ? this.failure
           : new LlmError(
-              `无法启动 ${this.label}：${errorMessage(error)}。请确认它已安装并完成登录。`,
+              `无法启动 ${this.label}：${errorMessage(error)}。${startHint(errorMessage(error))}`,
               'CLI_START_FAILED',
               { cause: error },
             )

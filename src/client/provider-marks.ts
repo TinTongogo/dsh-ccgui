@@ -6,7 +6,7 @@
 import { CLI_ROUTE_PREFIX, cliRoute } from '../constants.ts'
 
 /** A mark the client can draw; `cli` is the generic one for a CLI without its own. */
-export type ProviderMarkId = 'opencode' | 'omp' | 'codex' | 'pi' | 'claude' | 'codebuddy' | 'deepseek' | 'cli'
+export type ProviderMarkId = 'opencode' | 'omp' | 'codex' | 'pi' | 'claude' | 'codebuddy' | 'kimi' | 'deepseek' | 'cli'
 
 /** The fields of a session-list row this plugin reads. */
 export interface SessionRowValues {
@@ -22,6 +22,7 @@ const OWN_MARKS: ReadonlyMap<string, ProviderMarkId> = new Map<string, ProviderM
   [cliRoute('pi'), 'pi'],
   [cliRoute('claude'), 'claude'],
   [cliRoute('codebuddy'), 'codebuddy'],
+  [cliRoute('kimi'), 'kimi'],
 ])
 
 /** @returns the CLI routes that have a mark of their own, so a test can check them against the bundled CLIs. */

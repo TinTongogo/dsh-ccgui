@@ -75,7 +75,10 @@ describe('openStdioTransport', () => {
     const { agentCapabilities } = await transport.initialize()
     expect(agentCapabilities?.loadSession).toBe(true)
     const { sessionId } = await transport.newSession(cwd)
-    await expect(transport.prompt(sessionId, text('hello'))).resolves.toBe('end_turn')
+    await expect(transport.prompt(sessionId, text('hello'))).resolves.toEqual({
+      stopReason: 'end_turn',
+      usage: { totalTokens: 1200, inputTokens: 150, outputTokens: 50, cachedReadTokens: 1000 },
+    })
     expect(updates.map((update) => update.sessionUpdate)).toEqual(['agent_thought_chunk', 'agent_message_chunk'])
     await transport.dispose()
   })
@@ -125,7 +128,7 @@ describe('openStdioTransport', () => {
     const { sessionId } = await transport.newSession(cwd)
     const turn = transport.prompt(sessionId, text('HANG'))
     transport.cancel(sessionId)
-    await expect(turn).resolves.toBe('cancelled')
+    await expect(turn).resolves.toMatchObject({ stopReason: 'cancelled' })
     await transport.dispose()
   })
 
@@ -253,7 +256,7 @@ describe('openStdioTransport over a scripted subprocess', () => {
     await transport.setConfigOption('s1', 'model', 'big')
     await transport.deleteSession('s3')
     await transport.closeSession('s4')
-    await expect(transport.prompt('s1', text('hi'))).resolves.toBe('end_turn')
+    await expect(transport.prompt('s1', text('hi'))).resolves.toEqual({ stopReason: 'end_turn' })
     transport.cancel('s5')
     await expect.poll(() => fake.received.length).toBe(9)
     expect(fake.received.map(({ method, params }) => ({ method, params }))).toEqual([

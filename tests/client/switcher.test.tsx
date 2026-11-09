@@ -224,6 +224,21 @@ describe('CliSwitcher', () => {
     expect(items[0]?.getAttribute('aria-checked')).toBe('true')
   })
 
+  // Providers the user added in the harness's model settings belong to the model menu.
+  it('offers the harness once however many providers it runs', async () => {
+    const custom = { id: 'teamo', name: 'Teamo', models: [{ id: 'm1', name: 'M1' }] }
+    const account = { id: 'deepseek-account', name: 'deepseek-account', models: [{ id: 'chat', name: 'Chat' }] }
+    renderSlot(harness({ ...CLI_STATE, groups: [account, custom, ...CLI_STATE.groups] }), 'dsh-ccgui.switcher')
+    await userEvent.click(switcher())
+    const items = screen.getAllByRole('menuitemradio')
+    expect(items.map((item) => item.getAttribute('data-item-id'))).toEqual([
+      'deepseek-official',
+      'cli-claude',
+      'cli-codex',
+    ])
+    expect(screen.queryByRole('menuitemradio', { name: 'Teamo' })).toBeNull()
+  })
+
   it('remembers the providers it lists, for the settings page', () => {
     renderSlot(harness(), 'dsh-ccgui.switcher')
     expect(parseCliPrefs(window.localStorage.getItem(CLI_PREFS_STORAGE_KEY)).known).toEqual([

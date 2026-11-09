@@ -61,6 +61,12 @@ describe('arrangeChoices', () => {
     expect(arrangeChoices([DEEPSEEK, CLAUDE, CODEX, PI], prefs)).toEqual([CODEX, DEEPSEEK, PI])
   })
 
+  // Older versions listed the harness's own providers one by one and let users hide them.
+  it('drops stored hidden ids that are not CLIs', () => {
+    const raw = JSON.stringify({ hidden: ['deepseek-account', 'teamo', 'cli-pi'] })
+    expect(parseCliPrefs(raw).hidden).toEqual(['cli-pi'])
+  })
+
   it('keeps the built-in provider even when stored preferences hid it', () => {
     const prefs = snapshot({ hidden: ['deepseek-official', 'cli-claude', 'cli-codex', 'cli-pi'] })
     expect(arrangeChoices([DEEPSEEK, CLAUDE, CODEX, PI], prefs)).toEqual([DEEPSEEK])
@@ -94,10 +100,19 @@ describe('createCliPrefs', () => {
     const first = prefs.getSnapshot()
     prefs.remember([CLAUDE, DEEPSEEK])
     expect(prefs.getSnapshot()).toBe(first)
-    prefs.remember([{ id: 'cli-claude', label: 'Claude' }, CODEX])
+    prefs.remember([DEEPSEEK, { id: 'cli-claude', label: 'Claude' }, CODEX])
     expect(prefs.getSnapshot().known).toEqual([DEEPSEEK, { id: 'cli-claude', label: 'Claude' }, CODEX])
     expect(calls).toBe(2)
     expect(parseCliPrefs(storage.read(CLI_PREFS_STORAGE_KEY) ?? null)).toEqual(prefs.getSnapshot())
+  })
+
+  // Older versions listed the harness's own providers one by one; once the switcher reports
+  // only the harness entry, those rows leave the settings page.
+  it('forgets harness providers the switcher no longer reports', () => {
+    const stored = snapshot({ known: [{ id: 'teamo', label: 'Teamo' }, DEEPSEEK, CLAUDE] })
+    const prefs = createCliPrefs(memoryStorage({ [CLI_PREFS_STORAGE_KEY]: JSON.stringify(stored) }))
+    prefs.remember([DEEPSEEK, CLAUDE])
+    expect(prefs.getSnapshot().known).toEqual([DEEPSEEK, CLAUDE])
   })
 
   it('loads what was stored', () => {
@@ -126,6 +141,7 @@ describe('createCliPrefs', () => {
     const prefs = createCliPrefs(memoryStorage())
     prefs.remember([DEEPSEEK, CLAUDE, CODEX])
     prefs.setEnabled('deepseek-official', false)
+    prefs.setEnabled('deepseek-account', false)
     expect(prefs.getSnapshot().hidden).toEqual([])
     prefs.setEnabled('cli-claude', false)
     prefs.setEnabled('cli-codex', false)
@@ -150,6 +166,36 @@ describe('createCliPrefs', () => {
     expect(prefs.getSnapshot().hidden).toEqual([])
   })
 
+  // Kimi has been verified with a real account, so it shows from the start.
+  it('shows a verified CLI when first seen', () => {
+    const prefs = createCliPrefs(memoryStorage())
+    prefs.remember([DEEPSEEK, CLAUDE, { id: 'cli-kimi', label: 'Kimi CLI' }])
+    expect(prefs.getSnapshot().hidden).toEqual([])
+  })
+
+  it('forgets a provider the switcher stops offering, keeping the stored order and choice', () => {
+    const prefs = createCliPrefs(memoryStorage())
+    prefs.remember([DEEPSEEK, CLAUDE, CODEX])
+    prefs.move('cli-codex', -1)
+    prefs.setEnabled('cli-claude', false)
+    prefs.remember([DEEPSEEK, CODEX])
+    expect(prefs.getSnapshot().known).toEqual([DEEPSEEK, CODEX])
+    expect(prefs.getSnapshot().order).toEqual(['deepseek-official', 'cli-codex', 'cli-claude'])
+    expect(prefs.getSnapshot().hidden).toEqual(['cli-claude'])
+    expect(listedEntries(prefs.getSnapshot()).map((entry) => entry.id)).toEqual(['deepseek-official', 'cli-codex'])
+    // The provider coming back carries the choice the user made before it left.
+    prefs.remember([DEEPSEEK, CLAUDE, CODEX])
+    expect(listedEntries(prefs.getSnapshot()).find((entry) => entry.id === 'cli-claude')?.enabled).toBe(false)
+  })
+
+  it('keeps the list while the switcher has not listed any provider', () => {
+    const prefs = createCliPrefs(memoryStorage())
+    prefs.remember([DEEPSEEK, CLAUDE])
+    const before = prefs.getSnapshot()
+    prefs.remember([])
+    expect(prefs.getSnapshot()).toBe(before)
+  })
+
   it('stops notifying after unsubscribe and survives storage that throws', () => {
     const prefs = createCliPrefs({
       getItem: () => {
@@ -165,7 +211,7 @@ describe('createCliPrefs', () => {
     })
     prefs.remember([CLAUDE])
     unsubscribe()
-    prefs.remember([CODEX])
+    prefs.remember([CLAUDE, CODEX])
     expect(calls).toBe(1)
     expect(prefs.getSnapshot().known).toEqual([CLAUDE, CODEX])
   })

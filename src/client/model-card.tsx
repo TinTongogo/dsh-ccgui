@@ -1,14 +1,18 @@
 /// <reference lib="dom" />
 
 /**
- * The open menu of a CLI's models: the search field, the rows and the card around them.
+ * The open model menu: the search field, the rows under their providers' headings and the
+ * card around them.
  * @module dsh-ccgui/client/model-card
  */
 
 import type { CSSProperties, ReactElement, RefObject } from 'react'
 import { IconCheckOutlineRegular, Input, MenuSurface, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { CliModels, DirectoryModel, DirectorySelection } from './choices.ts'
+import type { DirectorySelection } from './choices.ts'
+import { isRow, rowCount } from './menu-models.ts'
+import type { MenuModels, MenuRow, MenuSection } from './menu-models.ts'
 import {
+  HEADING_CLASS,
   HINT_CLASS,
   MENU_CLASS,
   ROW_ACTIVE_CLASS,
@@ -25,10 +29,11 @@ export const SEARCH_ABOVE = 4
 const MENU_LABEL = '模型'
 const SEARCH_LABEL = '搜索模型…'
 const NO_MATCH_LABEL = '没有匹配的模型。'
+const NO_MODELS_LABEL = '暂无可用模型'
 
 interface ModelRowProps {
   readonly domId: string
-  readonly model: DirectoryModel
+  readonly model: MenuRow
   readonly selected: boolean
   readonly settling: boolean
   readonly active: boolean
@@ -60,8 +65,9 @@ function ModelRow({ domId, model, selected, settling, active, busy, onHover, onC
 
 export interface ModelCardProps {
   readonly id: string
-  readonly models: CliModels
-  readonly visible: readonly DirectoryModel[]
+  readonly models: MenuModels
+  /** The sections left after search. */
+  readonly sections: readonly MenuSection[]
   readonly active: number
   readonly pending: DirectorySelection | null
   readonly query: string
@@ -70,7 +76,7 @@ export interface ModelCardProps {
   readonly searchRef: RefObject<HTMLInputElement>
   readonly onQuery: (query: string) => void
   readonly onHighlight: (index: number) => void
-  readonly onChoose: (modelId: string) => void
+  readonly onChoose: (row: MenuRow) => void
 }
 
 interface ModelSearchProps {
@@ -106,31 +112,49 @@ function ModelSearch({ id, active, query, busy, searchRef, onQuery }: ModelSearc
 
 type ModelRowsProps = Pick<
   ModelCardProps,
-  'id' | 'models' | 'visible' | 'active' | 'pending' | 'onHighlight' | 'onChoose'
+  'id' | 'models' | 'sections' | 'active' | 'pending' | 'onHighlight' | 'onChoose'
 >
 
-function ModelRows({ id, models, visible, active, pending, onHighlight, onChoose }: ModelRowsProps): ReactElement {
+/** Indexes run across the sections, so the highlight and the arrows ignore the headings. */
+function ModelRows({ id, models, sections, active, pending, onHighlight, onChoose }: ModelRowsProps): ReactElement {
+  const starts = sections.map((_section, index) => rowCount(sections.slice(0, index)))
   return (
     <div id={`${id}-rows`} className={`${ROWS_CLASS} scrollable`} role="menu" aria-label={MENU_LABEL}>
-      {visible.map((model, index) => (
-        <ModelRow
-          key={model.id}
-          domId={`${id}-model-${index}`}
-          model={model}
-          selected={model.id === models.currentId}
-          settling={pending?.provider === models.provider && pending.model === model.id}
-          active={index === active}
-          busy={pending !== null}
-          onHover={() => {
-            onHighlight(index)
-          }}
-          onChoose={() => {
-            onChoose(model.id)
-          }}
-        />
+      {sections.map((section, sectionIndex) => (
+        <div key={section.id} role="none">
+          {models.headed && (
+            <div className={HEADING_CLASS} role="presentation">
+              {section.name}
+            </div>
+          )}
+          {section.rows.map((row, rowIndex) => {
+            const index = (starts[sectionIndex] ?? 0) + rowIndex
+            return (
+              <ModelRow
+                key={`${row.provider}/${row.model}`}
+                domId={`${id}-model-${index}`}
+                model={row}
+                selected={isRow(row, models.current)}
+                settling={isRow(row, pending)}
+                active={index === active}
+                busy={pending !== null}
+                onHover={() => {
+                  onHighlight(index)
+                }}
+                onChoose={() => {
+                  onChoose(row)
+                }}
+              />
+            )
+          })}
+        </div>
       ))}
     </div>
   )
+}
+
+function emptyLabel(models: MenuModels): string {
+  return rowCount(models.sections) === 0 ? NO_MODELS_LABEL : NO_MATCH_LABEL
 }
 
 /**
@@ -142,7 +166,7 @@ export function ModelCard(props: ModelCardProps): ReactElement {
   const {
     id,
     models,
-    visible,
+    sections,
     active,
     pending,
     query,
@@ -161,18 +185,20 @@ export function ModelCard(props: ModelCardProps): ReactElement {
       className={MENU_CLASS}
       style={anchorStyle}
       role="group"
-      aria-label={models.name}
+      aria-label={models.label}
     >
-      {models.rows.length > SEARCH_ABOVE && (
+      {rowCount(models.sections) > SEARCH_ABOVE && (
         <ModelSearch id={id} active={active} query={query} busy={busy} searchRef={searchRef} onQuery={onQuery} />
       )}
-      <ModelRows {...{ id, models, visible, active, pending, onHighlight, onChoose }} />
-      {visible.length === 0 && (
+      <ModelRows {...{ id, models, sections, active, pending, onHighlight, onChoose }} />
+      {sections.length === 0 && (
         <div className={HINT_CLASS} role="status">
-          {NO_MATCH_LABEL}
+          {emptyLabel(models)}
         </div>
       )}
-      {!models.listed && <div className={HINT_CLASS} role="status">{`还没有读到 ${models.name} 的模型列表`}</div>}
+      {models.unlisted !== undefined && (
+        <div className={HINT_CLASS} role="status">{`还没有读到 ${models.unlisted} 的模型列表`}</div>
+      )}
     </MenuSurface>
   )
 }

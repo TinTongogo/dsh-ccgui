@@ -5,12 +5,12 @@
  * @module dsh-ccgui/session/turn-queue
  */
 
-import type { ContentBlock as AcpContentBlock, StopReason } from '@agentclientprotocol/sdk'
-import type { AcpTransport } from '../transport.ts'
+import type { ContentBlock as AcpContentBlock } from '@agentclientprotocol/sdk'
+import type { AcpTransport, PromptOutcome } from '../transport.ts'
 
 /** How a CLI turn ended. */
 export type TurnEnd =
-  { readonly type: 'turn-end'; readonly stopReason: StopReason } | { readonly type: 'failure'; readonly error: Error }
+  (PromptOutcome & { readonly type: 'turn-end' }) | { readonly type: 'failure'; readonly error: Error }
 
 /** User input waiting to be sent as a CLI turn. */
 export interface QueuedPrompt {
@@ -134,8 +134,8 @@ export class TurnQueue {
     this.ended = Promise.withResolvers<void>()
     this.lifetime = new AbortController()
     target.transport.prompt(target.acpSessionId, next.blocks).then(
-      (stopReason) => {
-        this.end({ type: 'turn-end', stopReason })
+      (outcome) => {
+        this.end({ type: 'turn-end', ...outcome })
       },
       (error: unknown) => {
         this.end({ type: 'failure', error: error instanceof Error ? error : new Error(String(error)) })
