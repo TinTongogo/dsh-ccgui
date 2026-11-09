@@ -1,6 +1,6 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./assets/illustrations/01-hero-dark.webp" />
-  <img alt="DSH 截图：输入框旁的 CLI 菜单列出 Claude Code、Codex CLI、PI CLI、OMP CLI、OpenCode、CodeBuddy CLI" src="./assets/illustrations/01-hero-light.webp" />
+  <img alt="DSH 截图：输入框旁的 CLI 菜单列出 Claude Code、Kimi CLI、Codex CLI、PI CLI、OMP CLI、OpenCode" src="./assets/illustrations/01-hero-light.webp" />
 </picture>
 
 ---
@@ -10,7 +10,7 @@
 
 # DSH CCGUI
 
-**在 DeepSeek Harness 里直接使用 Claude Code、Codex、PI、OMP 等 Agent CLI**
+**在 DeepSeek Harness 里直接使用 Claude Code、Kimi、Codex、PI、OMP 等 Agent CLI**
 
 [![CI][ci-shield]][ci-link] [![Coverage][coverage-shield]][coverage-link] [![License][license-shield]][license-link] ![DSH][dsh-shield]
 
@@ -127,7 +127,7 @@ DSH 设置里的「CC GUI 设置」可以调整 CLI 菜单的顺序和开关，�
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./assets/illustrations/08-settings-dark.webp" />
-  <img alt="CC GUI 设置截图：CLI 列表的顺序和开关，后面是界面交互的开关" src="./assets/illustrations/08-settings-light.webp" />
+  <img alt="CC GUI 设置截图：CLI 列表（Claude Code、Kimi CLI、Codex CLI 等）的顺序和开关，后面是界面交互的开关" src="./assets/illustrations/08-settings-light.webp" />
 </picture>
 
 <details>
@@ -153,12 +153,12 @@ DSH 设置里的「CC GUI 设置」可以调整 CLI 菜单的顺序和开关，�
 | CLI | 写文件和执行命令 | 按停止 |
 | --- | --- | --- |
 | Claude Code | auto 模式不询问；手动模式走 DSH 审批卡片 | 命令结束；**放到后台的命令继续跑** |
+| Kimi CLI | 尚未验证 | 尚未验证 |
 | Codex CLI | 不询问，直接执行 | 回合结束；**已启动的命令继续跑** |
 | PI CLI | 不询问，直接执行 | 命令结束 |
 | OMP CLI | 不询问，直接执行 | 回合结束 |
 | OpenCode | 按它的权限配置询问，走 DSH 审批卡片 | 命令结束 |
 | CodeBuddy CLI | 尚未验证 | 尚未验证 |
-| Kimi CLI | 尚未验证 | 尚未验证 |
 
 继续跑的后台命令在会话关闭时才结束。表中是默认配置下在一台机器上的实测结果，配置和版本不同结果也可能不同。
 
