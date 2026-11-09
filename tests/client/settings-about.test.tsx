@@ -3,9 +3,9 @@
 
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PLUGIN_VERSION, SETTINGS_ABOUT_STYLES, SettingsAbout } from '../../src/client/settings-about.tsx'
 
 afterEach(() => {
@@ -58,5 +58,38 @@ describe('SettingsAbout', () => {
     await userEvent.click(toggle)
     await userEvent.keyboard('{Escape}')
     expect(screen.queryByRole('img', { name: '官方微信交流群二维码' })).toBeNull()
+  })
+
+  it('turns the version pill into a link to a newer release', async () => {
+    const url = 'https://github.com/zhukunpenglinyutong/dsh-ccgui/releases/tag/v1.0.2'
+    const { container } = render(<SettingsAbout checkUpdate={() => Promise.resolve({ version: '1.0.2', url })} />)
+    const link = await screen.findByRole('link', { name: '有新版本 v1.0.2，查看更新说明' })
+    expect(link.getAttribute('href')).toBe(url)
+    expect(link.getAttribute('target')).toBe('_blank')
+    expect(link.getAttribute('rel')).toBe('noreferrer')
+    expect(link.getAttribute('title')).toBeNull()
+    expect(link.textContent).toBe('版本开发版↑ v1.0.2')
+    expect(container.querySelectorAll('.dsh-ccgui-about-pill')).toHaveLength(3)
+  })
+
+  it('keeps the plain version pill when there is no newer release', async () => {
+    const checkUpdate = vi.fn(() => Promise.resolve(undefined))
+    render(<SettingsAbout checkUpdate={checkUpdate} />)
+    await waitFor(() => {
+      expect(checkUpdate).toHaveBeenCalled()
+    })
+    expect(screen.queryByRole('link', { name: /有新版本/ })).toBeNull()
+    expect(screen.getByText('开发版').parentElement?.tagName).toBe('SPAN')
+  })
+
+  it('ignores an answer that arrives after the page closed', async () => {
+    let resolve: (value: undefined) => void = () => undefined
+    const pending = new Promise<undefined>((done) => {
+      resolve = done
+    })
+    const { unmount } = render(<SettingsAbout checkUpdate={() => pending} />)
+    unmount()
+    resolve(undefined)
+    await expect(pending).resolves.toBeUndefined()
   })
 })
