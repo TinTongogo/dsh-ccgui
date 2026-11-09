@@ -42,10 +42,10 @@
 
 ```sh
 # DSH 桌面版：先 Cmd+Q 完全退出，再用应用内置的 dsh 安装
-"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add dsh-ccgui@1.0.0
+"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add dsh-ccgui@1.0.2
 
 # DSH 命令行版（dsh web）
-dsh plugin --profile web add dsh-ccgui@1.0.0
+dsh plugin --profile web add dsh-ccgui@1.0.2
 ```
 
 卸载把 `add ...` 换成 `remove dsh-ccgui`。
@@ -53,7 +53,7 @@ dsh plugin --profile web add dsh-ccgui@1.0.0
 </details>
 
 > [!TIP]
-> 从源码安装时先 `pnpm install && pnpm run build`，再在「添加插件」里填仓库的本地路径（命令行则把 `dsh-ccgui@1.0.0` 换成仓库路径）；pnpm 的 peerDependencies 警告可以忽略。
+> 从源码安装时先 `pnpm install && pnpm run build`，再在「添加插件」里填仓库的本地路径（命令行则把 `dsh-ccgui@1.0.2` 换成仓库路径）；pnpm 的 peerDependencies 警告可以忽略。
 
 <div align="right"><a href="#readme-top">返回顶部 ↑</a></div>
 
@@ -137,6 +137,7 @@ DSH 设置里的「CC GUI 设置」可以调整 CLI 菜单的顺序和开关，�
 - DeepSeek 是内置模型提供方，始终保留，不能关闭。关掉的 CLI 不再出现在菜单里，行内标出「已关闭」。
 - 「界面交互」页签可分别关闭：右侧栏默认打开工作区文件、会话顶部的终端按钮、启动脚本。
 - 「更多功能」页签列出还没开放的功能（会话自动命名、WorkTree、Git 信息自动生成、增强提示词、AI 账号限额提示），目前只有说明。
+- 「版本记录」页签一个版本一页，翻页查看每个版本改了什么，当前运行的版本会标出来。
 - CodeBuddy CLI 尚未用真实账号验证，默认关闭，需要时在这里打开。
 - 列出的 CLI 来自打开过的会话，第一次使用前先打开任一会话。
 

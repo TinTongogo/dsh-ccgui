@@ -39,8 +39,8 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('heading', { name: 'CC GUI 设置' })).toBeDefined()
     expect(screen.getByRole('link', { name: 'GitHub' })).toBeDefined()
     const tabs = screen.getAllByRole('tab')
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['CLI 列表', '界面交互', '更多功能'])
-    expect(tabs.map((tab) => tab.getAttribute('aria-selected'))).toEqual(['true', 'false', 'false'])
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['CLI 列表', '界面交互', '更多功能', '版本记录'])
+    expect(tabs.map((tab) => tab.getAttribute('aria-selected'))).toEqual(['true', 'false', 'false', 'false'])
     expect(screen.getByRole('tabpanel', { name: 'CLI 列表' })).toBeDefined()
     expect(screen.getByText('打开任一会话后，这里会列出可切换的 CLI。')).toBeDefined()
     expect(screen.queryByRole('switch')).toBeNull()
@@ -86,12 +86,23 @@ describe('SettingsPage', () => {
     expect(panel.querySelectorAll('button, a, input, select, [role="switch"]')).toHaveLength(0)
   })
 
+  it('opens the release notes with a pager on the newest version', async () => {
+    render(
+      <SettingsPage settings={createFeatureSettings(memoryStorage())} cliPrefs={createCliPrefs(memoryStorage())} />,
+    )
+    await userEvent.click(screen.getByRole('tab', { name: '版本记录' }))
+    expect(screen.getByRole('tabpanel', { name: '版本记录' })).toBeDefined()
+    expect(screen.getByRole('button', { name: '上一页' }).getAttribute('disabled')).not.toBeNull()
+    expect(screen.getByRole('button', { name: '下一页' })).toBeDefined()
+  })
+
   it('draws its navigation icon at the requested size and ships styles for its classes', () => {
     const { container } = render(<SettingsIcon size={18} />)
     expect(container.querySelector('svg')?.getAttribute('width')).toBe('18')
     expect(SETTINGS_PAGE_STYLES).toContain('.dsh-ccgui-settings')
     expect(SETTINGS_PAGE_STYLES).toContain('--dsw-alias-state-success-primary')
     expect(SETTINGS_PAGE_STYLES).toContain('.dsh-ccgui-more-soon')
+    expect(SETTINGS_PAGE_STYLES).toContain('.dsh-ccgui-notes-page')
   })
 })
 

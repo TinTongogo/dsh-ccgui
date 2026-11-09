@@ -409,6 +409,13 @@ await scenario('settings: switching a feature off restores the harness interacti
   await page.getByRole('tab', { name: '更多功能' }).click()
   await until(() => page.getByText('即将开放…').first().isVisible(), 'upcoming features')
   await shot('settings-more')
+  await page.getByRole('tab', { name: '版本记录' }).click()
+  const notesCount = page.locator('.dsh-ccgui-notes-count')
+  await until(() => notesCount.isVisible(), 'release notes page')
+  const firstPage = (await notesCount.textContent()) ?? ''
+  await page.getByRole('button', { name: '下一页' }).click()
+  await until(async () => (await notesCount.textContent()) !== firstPage, 'the pager turned the page')
+  await shot('settings-notes')
   await page.getByRole('tab', { name: '界面交互' }).click()
   await until(() => terminalSwitch.isVisible(), 'settings page')
   await terminalSwitch.click()
