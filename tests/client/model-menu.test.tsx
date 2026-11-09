@@ -12,7 +12,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { DirectorySelection, DirectoryState } from '../../src/client/choices.ts'
 import { CliModelMenu } from '../../src/client/model-menu.tsx'
 import type { ModelMenuInjected } from '../../src/client/model-menu.tsx'
-import { MENU_CLASS, ROW_ACTIVE_CLASS } from '../../src/client/model-menu-styles.ts'
+import { MENU_CLASS, ROW_ACTIVE_CLASS, ROW_MARK_CLASS } from '../../src/client/model-menu-styles.ts'
 import { createStore } from '../fixtures/client-store.ts'
 import type { TestStore } from '../fixtures/client-store.ts'
 
@@ -225,6 +225,19 @@ describe('CliModelMenu keyboard', () => {
 })
 
 describe('CliModelMenu search', () => {
+  it("puts each model's vendor mark beside it, keeping a blank slot where none is known", async () => {
+    const models = [
+      { id: 'deepseek-v4', name: 'DeepSeek V4' },
+      { id: 'k3', name: 'K3' },
+      { id: 'fake-small', name: 'Fake Small' },
+    ]
+    const { user } = setup(directoryState(models, 'k3'))
+    await user.click(trigger())
+    const marks = rows().map((row) => row.querySelector('[data-cli-mark]')?.getAttribute('data-cli-mark'))
+    expect(marks).toEqual(['deepseek', 'kimi', undefined])
+    expect(rows().every((row) => row.querySelector(`.${ROW_MARK_CLASS}`) !== null)).toBe(true)
+  })
+
   it('offers no search for a short list', async () => {
     const { user } = setup()
     await user.click(trigger())

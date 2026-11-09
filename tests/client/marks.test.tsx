@@ -3,7 +3,7 @@
 
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { ProviderMark } from '../../src/client/marks.tsx'
+import { MarkGlyph, ProviderMark } from '../../src/client/marks.tsx'
 
 afterEach(() => {
   cleanup()
@@ -58,5 +58,12 @@ describe('ProviderMark', () => {
       expect(id).not.toContain(':')
       expect(container.querySelector(`path[fill="url(#${id})"]`)).not.toBeNull()
     }
+  })
+})
+
+describe('MarkGlyph', () => {
+  it('draws a mark by its id', () => {
+    const svg = render(<MarkGlyph id="kimi" size={14} />).container.querySelector('svg')
+    expect(svg?.getAttribute('data-cli-mark')).toBe('kimi')
   })
 })

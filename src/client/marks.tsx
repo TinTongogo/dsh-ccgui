@@ -136,6 +136,22 @@ function GenericCliMark(props: MarkProps) {
 }
 
 /**
+ * Draw a mark by its id.
+ * @param props.id - the mark.
+ * @param props.size - width and height in pixels.
+ * @returns the mark.
+ */
+export function MarkGlyph({ id, size }: MarkProps): ReactElement {
+  if (id === 'omp') return <OmpMark id={id} size={size} />
+  if (id === 'codebuddy') return <CodeBuddyMark id={id} size={size} />
+  const colored = COLORED[id]
+  if (colored !== undefined) return <ColoredMark id={id} size={size} {...colored} />
+  const paths = MONOCHROME[id]
+  if (paths !== undefined) return <MonochromeMark id={id} size={size} paths={paths} />
+  return <GenericCliMark id={id} size={size} />
+}
+
+/**
  * Draw a provider's mark.
  * @param props.provider - a provider route.
  * @param props.size - width and height in pixels.
@@ -149,12 +165,5 @@ export function ProviderMark({
   readonly size: number
 }): ReactElement | null {
   const id = markOf(provider)
-  if (id === undefined) return null
-  if (id === 'omp') return <OmpMark id={id} size={size} />
-  if (id === 'codebuddy') return <CodeBuddyMark id={id} size={size} />
-  const colored = COLORED[id]
-  if (colored !== undefined) return <ColoredMark id={id} size={size} {...colored} />
-  const paths = MONOCHROME[id]
-  if (paths !== undefined) return <MonochromeMark id={id} size={size} paths={paths} />
-  return <GenericCliMark id={id} size={size} />
+  return id === undefined ? null : <MarkGlyph id={id} size={size} />
 }
