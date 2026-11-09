@@ -2,6 +2,7 @@ import type { StopReason } from '@agentclientprotocol/sdk'
 import { LlmError } from '@deepseek-ai/dsh-llm'
 import { describe, expect, it } from 'vitest'
 import { errorMessage, toolCallStep, turnEndStep, turnFailure } from '../../src/session/outcomes.ts'
+import { ptcCall } from '../../src/session/ptc-call.ts'
 import { nativeReplayState } from '../../src/request-input.ts'
 import { appendDelta, EMPTY_BLOCKS } from '../../src/stream-blocks.ts'
 import { mergeToolUpdate, toCliToolArgs } from '../../src/tool-record.ts'
@@ -64,6 +65,24 @@ describe('toolCallStep', () => {
       type: 'block-end',
       index: 0,
       block: { type: 'tool-call', id: 'cli-1', name: 'cli_tool', arguments: JSON.stringify(toCliToolArgs(record)) },
+    })
+  })
+
+  it('hands the call over as run_code in a PTC session', () => {
+    const record = mergeToolUpdate(undefined, { toolCallId: 'a', title: 'Run', status: 'in_progress' }, () => 'cli-1')
+    const step = toolCallStep(EMPTY_BLOCKS, record, REPLAY, { timeoutMs: 1_000 })
+
+    expect(step.done).toBe(true)
+    expect(step.chunks.at(-1)).toEqual({ type: 'finish', reason: { kind: 'tool-calls' }, ...REPLAY })
+    expect(step.chunks).toContainEqual({
+      type: 'block-end',
+      index: 0,
+      block: {
+        type: 'tool-call',
+        id: 'cli-1',
+        name: 'run_code',
+        arguments: ptcCall(record, { timeoutMs: 1_000 }).arguments,
+      },
     })
   })
 })

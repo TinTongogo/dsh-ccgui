@@ -40,6 +40,18 @@ describe('ToolMirror: recording and announcing', () => {
     expect(mirror.acpIdFor('cli-9')).toBeUndefined()
   })
 
+  // In PTC mode the harness runs the mirror tool inside run_code, under a nested id.
+  it('finds a call by the nested id PTC gives its mirror', () => {
+    const { mirror } = setup()
+    mirror.apply(pending('a'), false)
+
+    expect(mirror.acpIdFor('cli-1:ptc:1')).toBe('a')
+    expect(mirror.acpIdFor('cli-1:ptc:42')).toBe('a')
+    expect(mirror.acpIdFor('cli-9:ptc:1')).toBeUndefined()
+    mirror.forget('a')
+    expect(mirror.acpIdFor('cli-1:ptc:1')).toBeUndefined()
+  })
+
   it('announces a running call exactly once', () => {
     const { mirror, ready } = setup()
     mirror.apply(pending('a'), false)

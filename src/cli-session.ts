@@ -32,6 +32,7 @@ import type { ConfigOptions } from './session/model-state.ts'
 import { errorMessage } from './session/outcomes.ts'
 import type { ReplayFields } from './session/outcomes.ts'
 import { CANCELLED, PermissionQueue } from './session/permission-queue.ts'
+import type { PtcWrap } from './session/ptc-call.ts'
 import { readStep } from './session/read-step.ts'
 import { startHint } from './session/start-hint.ts'
 import { ToolMirror } from './session/tool-mirror.ts'
@@ -133,11 +134,11 @@ export class CliSession {
    * @yields the step's stream chunks, ending with `finish`.
    */
   async *stream(request: StreamRequest): AsyncGenerator<StreamChunk> {
-    const { signal } = request
+    const { signal, ptc } = request
     signal?.throwIfAborted()
     if (this.failure === undefined) {
       await this.prepareStep(request)
-      yield* this.readStep(signal)
+      yield* this.readStep(signal, ptc)
       return
     }
     if (this.events.size === 0) throw this.failure
@@ -146,7 +147,7 @@ export class CliSession {
     // is remembered because a tool call read here moves the message out of the window
     // `unseenUserInput` looks at, and the next step could no longer tell.
     this.owesInput ||= this.unsentInput(request).blocks.length > 0
-    yield* this.readStep(signal)
+    yield* this.readStep(signal, ptc)
   }
 
   /**
@@ -423,7 +424,7 @@ export class CliSession {
       : { replayState: nativeReplayState(this.acpSessionId, this.options.dshSessionId) }
   }
 
-  private readStep(signal: AbortSignal | undefined): AsyncGenerator<StreamChunk> {
+  private readStep(signal: AbortSignal | undefined, ptc: PtcWrap | undefined): AsyncGenerator<StreamChunk> {
     return readStep(
       {
         label: this.label,
@@ -437,6 +438,7 @@ export class CliSession {
           return record
         },
         replay: () => this.replayFields(),
+        ...(ptc === undefined ? {} : { ptc }),
       },
       signal,
     )

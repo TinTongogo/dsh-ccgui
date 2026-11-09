@@ -15,6 +15,7 @@ import type {
   StreamChunk,
 } from '@deepseek-ai/dsh-llm'
 import type { CliSession } from './cli-session.ts'
+import type { PtcWrap } from './session/ptc-call.ts'
 
 export { DEFAULT_MODEL_ID } from './constants.ts'
 
@@ -34,6 +35,8 @@ export interface AdapterDeps {
   labelFor(provider: string): string | undefined
   /** The live CLI session for a harness session; throws when it cannot run here. */
   resolveSession(provider: string, sessionId: string): CliSession
+  /** Set in a PTC session; throws when the CLI cannot run under its runtime. */
+  ptcWrapFor(provider: string, sessionId: string): PtcWrap | undefined
   /** Ids of the user messages in the session's open turn. */
   currentTurnMessageIds(sessionId: string): ReadonlySet<string>
   /** The models to offer for a route. */
@@ -90,6 +93,8 @@ export class CliBridgeAdapter extends LlmAdapter {
     if (sessionId === undefined) {
       throw new LlmError('CLI 只能在会话里使用，不支持一次性模型请求。', 'UNSUPPORTED_OPTION')
     }
+    // Read first, so a CLI that cannot run under this PTC runtime is never started.
+    const ptc = this.deps.ptcWrapFor(provider, sessionId)
     const session = this.deps.resolveSession(provider, sessionId)
     yield* session.stream({
       messages,
@@ -97,6 +102,7 @@ export class CliBridgeAdapter extends LlmAdapter {
       model,
       ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
       currentTurnMessageIds: this.deps.currentTurnMessageIds(sessionId),
+      ...(ptc === undefined ? {} : { ptc }),
     })
   }
 }

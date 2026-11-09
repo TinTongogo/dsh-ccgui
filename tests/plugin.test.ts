@@ -614,6 +614,44 @@ describe('CliBridge sessions', () => {
   })
 })
 
+const PTC_RUNTIME = { language: 'typescript', programFormat: 'function-body', timeout: { defaultMs: 1, maxMs: 9_000 } }
+
+describe('CliBridge in PTC mode', () => {
+  it('sends a CLI call as run_code and runs its mirror under the nested id', async () => {
+    const h = harness()
+    h.root.provide('approval', { request: () => Promise.resolve('allowed-once' as const) })
+    h.root.provide('ptcRuntime', PTC_RUNTIME)
+    await start(h)
+    const cwd = mkdtempSync(join(tmpdir(), 'ccgui-cwd-'))
+    const { agent } = addAgent(h, { cwd, preset: 'ptc' })
+    openTurn(h, 'dsh-1', ['m1'])
+    const chunks = await collect(onlyAdapter(h).stream(request({ messages: [user('m1', 'WRITE out.txt')] })))
+    const call = toolCallOf(chunks)
+    expect(call).toMatchObject({ name: 'run_code', args: { timeoutMs: 9_000 } })
+    const exec = fake<ToolRunContext>({
+      agent,
+      callId: fake<ToolRunContext['callId']>(`${call.id}:ptc:1`),
+      signal: AbortSignal.timeout(10_000),
+    })
+    // The arguments the program hands the mirror tool binding.
+    const forwarded = /tools\.cli_tool\((.*)\)\)\.text$/s.exec(String(call.args.code))?.[1] ?? '{}'
+    const result = onlyTool(h).definition.execute(JSON.parse(forwarded) as Record<string, unknown>, exec)
+    await expect(result).resolves.toMatchObject({ text: 'Created out.txt' })
+    expect(readFileSync(join(cwd, 'out.txt'), 'utf8')).toBe('hi\n')
+  })
+
+  it('refuses without starting the CLI when the PTC runtime cannot run the program', async () => {
+    const h = harness()
+    h.root.provide('ptcRuntime', { ...PTC_RUNTIME, language: 'python' })
+    await start(h)
+    addAgent(h, { preset: 'ptc' })
+    openTurn(h, 'dsh-1', ['m1'])
+    const stream = onlyAdapter(h).stream(request({ messages: [user('m1', 'hello')] }))
+    await expect(collect(stream)).rejects.toMatchObject({ code: 'CLI_WRONG_PRESET' })
+    expect(h.subprocess.spawned).toEqual([])
+  })
+})
+
 describe('CliBridge git routes', () => {
   it('registers the git routes once the web server and connection are up, and drops them on dispose', async () => {
     const h = harness()

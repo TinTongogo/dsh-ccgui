@@ -8,6 +8,7 @@ import type { RequestMessage } from '@deepseek-ai/dsh-llm'
 import type { CliEffortList, CliModelList } from '../model-options.ts'
 import type { ReadImage } from '../prompt-images.ts'
 import type { AcpTransport, TransportHandlers } from '../transport.ts'
+import type { PtcWrap } from './ptc-call.ts'
 import type { TurnEnd } from './turn-queue.ts'
 
 /** Construction inputs for one CLI session. */
@@ -57,6 +58,8 @@ export interface StreamRequest {
   /** The reasoning level selected in the harness, or its default filled in; omitted leaves the CLI's own. */
   readonly reasoningEffort?: string
   readonly signal?: AbortSignal
+  /** Set in a PTC session: this step's tool call goes out wrapped in `run_code`. */
+  readonly ptc?: PtcWrap
 }
 
 /** What the step reader consumes, in the order it happened. */
