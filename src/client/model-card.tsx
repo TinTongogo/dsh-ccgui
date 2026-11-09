@@ -129,7 +129,7 @@ function ModelRows({ id, models, sections, active, pending, onHighlight, onChoos
     <div id={`${id}-rows`} className={`${ROWS_CLASS} scrollable`} role="menu" aria-label={MENU_LABEL}>
       {sections.map((section, sectionIndex) => (
         <div key={section.id} role="none">
-          {models.headed && (
+          {section.headed && (
             <div className={HEADING_CLASS} role="presentation">
               {section.name}
             </div>

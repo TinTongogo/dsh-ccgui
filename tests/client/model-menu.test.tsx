@@ -304,6 +304,20 @@ describe('CliModelMenu choosing with the mouse', () => {
     expect(activeRow()).toBe('Fake Large')
   })
 
+  it('selects a model under a vendor heading with its full id', async () => {
+    const vendored = [
+      { id: 'default', name: 'Flash（默认）' },
+      { id: 'deepseek/flash', name: 'DeepSeek Flash' },
+      { id: 'kimi-code/k3', name: 'K3' },
+    ]
+    const { user, select } = setup(directoryState(vendored))
+    await user.click(trigger())
+    expect(screen.getAllByRole('presentation').map((heading) => heading.textContent)).toEqual(['deepseek', 'kimi-code'])
+    expect(rowNames()).toEqual(['Flash（默认）', 'DeepSeek Flash', 'K3'])
+    await user.keyboard('{ArrowDown}{ArrowDown}{Enter}')
+    expect(select).toHaveBeenCalledWith({ provider: PROVIDER, model: 'kimi-code/k3' })
+  })
+
   it('says when the CLI has not reported its models yet', async () => {
     const { user } = setup({
       groups: [{ id: PROVIDER, name: 'Fake CLI', models: [{ id: 'default', name: 'Fake CLI' }] }],

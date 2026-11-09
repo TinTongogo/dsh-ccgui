@@ -42,7 +42,7 @@ describe('menuModels on a provider the harness runs', () => {
   it('lists every provider but the CLIs, account first and API key second, with headings', () => {
     const models = menuModels(state())
     expect(models.sections.map((section) => section.name)).toEqual(['DeepSeek 账号', 'DeepSeek', 'Acme'])
-    expect(models.headed).toBe(true)
+    expect(models.sections.every((section) => section.headed)).toBe(true)
     expect(models.label).toBe('模型')
     expect(models.unlisted).toBeUndefined()
   })
@@ -90,10 +90,67 @@ describe('menuModels on a CLI', () => {
     const models = menuModels(state({ current: onClaude }))
     expect(models.sections).toHaveLength(1)
     expect(models.sections[0]?.rows.map((row) => row.name)).toEqual(['Opus（默认）', 'Opus'])
-    expect(models.headed).toBe(false)
+    expect(models.sections[0]?.headed).toBe(false)
     expect(models.label).toBe('Claude Code')
     expect(models.current?.name).toBe('Opus')
     expect(models.efforts).toEqual([])
+  })
+
+  // OMP and PI name each model `vendor/model` and list several vendors, with nothing in ACP to group them.
+  it('splits a CLI listing several vendors into one headed section each, the unprefixed rows first', () => {
+    const omp = {
+      id: 'cli-omp',
+      name: 'OMP CLI',
+      models: [
+        { id: 'default', name: 'V4.1 Flash（默认）' },
+        { id: 'deepseek/flash', name: 'V4.1 Flash' },
+        { id: 'kimi-code/k3', name: 'K3' },
+        { id: 'deepseek/pro', name: 'V4 Pro' },
+        { id: 'kimi-code/k3-256k', name: 'K3-256k' },
+      ],
+    }
+    const models = menuModels({ groups: [omp], current: { provider: 'cli-omp', model: 'kimi-code/k3' } })
+    expect(models.sections.map(({ name, headed }) => ({ name, headed }))).toEqual([
+      { name: 'OMP CLI', headed: false },
+      { name: 'deepseek', headed: true },
+      { name: 'kimi-code', headed: true },
+    ])
+    expect(models.sections.map((section) => section.rows.map((row) => row.model))).toEqual([
+      ['default'],
+      ['deepseek/flash', 'deepseek/pro'],
+      ['kimi-code/k3', 'kimi-code/k3-256k'],
+    ])
+    expect(new Set(models.sections.map((section) => section.id)).size).toBe(3)
+    expect(models.current).toMatchObject({ provider: 'cli-omp', model: 'kimi-code/k3', name: 'K3' })
+  })
+
+  it('keeps a CLI with a single vendor prefix as one list without a heading', () => {
+    const kimi = {
+      id: 'cli-kimi',
+      name: 'Kimi CLI',
+      models: [
+        { id: 'default', name: 'K3（默认）' },
+        { id: 'kimi-code/k3', name: 'K3' },
+        { id: 'kimi-code/k3-256k', name: 'K3-256k' },
+      ],
+    }
+    const models = menuModels({ groups: [kimi], current: { provider: 'cli-kimi', model: 'default' } })
+    expect(models.sections).toHaveLength(1)
+    expect(models.sections[0]).toMatchObject({ name: 'Kimi CLI', headed: false })
+    expect(models.sections[0]?.rows).toHaveLength(3)
+  })
+
+  it('leaves no empty leading section when every row has a vendor prefix', () => {
+    const pi = {
+      id: 'cli-pi',
+      name: 'PI CLI',
+      models: [
+        { id: 'deepseek/flash', name: 'Flash' },
+        { id: 'kimi-coding/k3', name: 'K3' },
+      ],
+    }
+    const models = menuModels({ groups: [pi], current: { provider: 'cli-pi', model: 'deepseek/flash' } })
+    expect(models.sections.map((section) => section.name)).toEqual(['deepseek', 'kimi-coding'])
   })
 
   it('names the CLI while only its stand-in is listed', () => {
@@ -115,8 +172,8 @@ describe('row helpers', () => {
   it('counts rows across sections', () => {
     expect(
       rowCount([
-        { id: 'a', name: 'A', rows: [row, row] },
-        { id: 'b', name: 'B', rows: [row] },
+        { id: 'a', name: 'A', headed: true, rows: [row, row] },
+        { id: 'b', name: 'B', headed: true, rows: [row] },
       ]),
     ).toBe(3)
   })
