@@ -61,6 +61,12 @@ describe('arrangeChoices', () => {
     expect(arrangeChoices([DEEPSEEK, CLAUDE, CODEX, PI], prefs)).toEqual([CODEX, DEEPSEEK, PI])
   })
 
+  // Older versions listed the harness's own providers one by one and let users hide them.
+  it('drops stored hidden ids that are not CLIs', () => {
+    const raw = JSON.stringify({ hidden: ['deepseek-account', 'teamo', 'cli-pi'] })
+    expect(parseCliPrefs(raw).hidden).toEqual(['cli-pi'])
+  })
+
   it('keeps the built-in provider even when stored preferences hid it', () => {
     const prefs = snapshot({ hidden: ['deepseek-official', 'cli-claude', 'cli-codex', 'cli-pi'] })
     expect(arrangeChoices([DEEPSEEK, CLAUDE, CODEX, PI], prefs)).toEqual([DEEPSEEK])
@@ -100,6 +106,15 @@ describe('createCliPrefs', () => {
     expect(parseCliPrefs(storage.read(CLI_PREFS_STORAGE_KEY) ?? null)).toEqual(prefs.getSnapshot())
   })
 
+  // Older versions listed the harness's own providers one by one; once the switcher reports
+  // only the harness entry, those rows leave the settings page.
+  it('forgets harness providers the switcher no longer reports', () => {
+    const stored = snapshot({ known: [{ id: 'teamo', label: 'Teamo' }, DEEPSEEK, CLAUDE] })
+    const prefs = createCliPrefs(memoryStorage({ [CLI_PREFS_STORAGE_KEY]: JSON.stringify(stored) }))
+    prefs.remember([DEEPSEEK, CLAUDE])
+    expect(prefs.getSnapshot().known).toEqual([DEEPSEEK, CLAUDE])
+  })
+
   it('loads what was stored', () => {
     const stored = snapshot({ known: [CLAUDE], hidden: ['cli-claude'] })
     const prefs = createCliPrefs(memoryStorage({ [CLI_PREFS_STORAGE_KEY]: JSON.stringify(stored) }))
@@ -126,6 +141,7 @@ describe('createCliPrefs', () => {
     const prefs = createCliPrefs(memoryStorage())
     prefs.remember([DEEPSEEK, CLAUDE, CODEX])
     prefs.setEnabled('deepseek-official', false)
+    prefs.setEnabled('deepseek-account', false)
     expect(prefs.getSnapshot().hidden).toEqual([])
     prefs.setEnabled('cli-claude', false)
     prefs.setEnabled('cli-codex', false)

@@ -7,7 +7,7 @@
  * @module dsh-ccgui/client/cli-prefs
  */
 
-import { cliRoute } from '../constants.ts'
+import { CLI_ROUTE_PREFIX, cliRoute } from '../constants.ts'
 import type { Store } from './store.ts'
 
 /** A provider as the switcher lists it. */
@@ -47,10 +47,14 @@ export interface CliPrefs extends Store<CliPrefsSnapshot> {
 export const CLI_PREFS_STORAGE_KEY = 'dsh-ccgui.cli-prefs'
 
 /**
- * The harness's own model route. The switcher always lists it, so the settings page cannot
- * offer a way to turn it off and stored preferences that hid it are ignored.
+ * Tell whether an entry is the harness's own, rather than a CLI. The switcher always lists
+ * it, so the settings page offers no way to turn it off and stored preferences that hid it
+ * are ignored. Any non-CLI id counts: which harness provider stands for the harness depends
+ * on the catalog, and older versions listed each of them separately.
+ * @param id - a provider route.
+ * @returns true for the harness's entry.
  */
-export const OFFICIAL_PROVIDER_ID = 'deepseek-official'
+export const isBuiltInChoice = (id: string): boolean => !id.startsWith(CLI_ROUTE_PREFIX)
 
 /**
  * CLIs that start out of the switcher. CodeBuddy is bundled but not yet verified with a real
@@ -96,7 +100,7 @@ export function parseCliPrefs(raw: string | null): CliPrefsSnapshot {
   return {
     known: choices(value.known),
     order: strings(value.order),
-    hidden: strings(value.hidden).filter((id) => id !== OFFICIAL_PROVIDER_ID),
+    hidden: strings(value.hidden).filter((id) => !isBuiltInChoice(id)),
   }
 }
 
@@ -117,7 +121,7 @@ function sortByOrder<T extends CliChoice>(items: readonly T[], order: readonly s
  */
 export function arrangeChoices<T extends CliChoice>(items: readonly T[], prefs: CliPrefsSnapshot): readonly T[] {
   return sortByOrder(
-    items.filter((item) => item.id === OFFICIAL_PROVIDER_ID || !prefs.hidden.includes(item.id)),
+    items.filter((item) => isBuiltInChoice(item.id) || !prefs.hidden.includes(item.id)),
     prefs.order,
   )
 }
@@ -129,7 +133,7 @@ export function arrangeChoices<T extends CliChoice>(items: readonly T[], prefs: 
 export function listedEntries(prefs: CliPrefsSnapshot): readonly CliEntry[] {
   return sortByOrder(prefs.known, prefs.order).map((choice) => ({
     ...choice,
-    enabled: choice.id === OFFICIAL_PROVIDER_ID || !prefs.hidden.includes(choice.id),
+    enabled: isBuiltInChoice(choice.id) || !prefs.hidden.includes(choice.id),
   }))
 }
 
@@ -162,9 +166,9 @@ function moveChoice(prefs: CliPrefsSnapshot, id: string, delta: -1 | 1): CliPref
 }
 
 function enableChoice(prefs: CliPrefsSnapshot, id: string, enabled: boolean): CliPrefsSnapshot {
-  // The official route is the harness's own model provider; the settings page has no switch
-  // for it, and a stale preference must not take it out of the switcher.
-  if (id === OFFICIAL_PROVIDER_ID) return prefs
+  // The harness's entry has no switch on the settings page, and a stale preference must not
+  // take it out of the switcher.
+  if (isBuiltInChoice(id)) return prefs
   const hidden = prefs.hidden.includes(id)
   if (enabled) return hidden ? { ...prefs, hidden: prefs.hidden.filter((candidate) => candidate !== id) } : prefs
   return hidden ? prefs : { ...prefs, hidden: [...prefs.hidden, id] }

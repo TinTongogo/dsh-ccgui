@@ -11,7 +11,7 @@ import {
   IconChevronUpOutlineRegular,
   Switch,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import { OFFICIAL_PROVIDER_ID, listedEntries } from './cli-prefs.ts'
+import { isBuiltInChoice, listedEntries } from './cli-prefs.ts'
 import type { CliEntry, CliPrefs } from './cli-prefs.ts'
 import { ProviderMark } from './marks.tsx'
 import { useStore } from './store.ts'
@@ -85,7 +85,7 @@ function CliRow({
   readonly last: boolean
   readonly prefs: CliPrefs
 }) {
-  const locked = entry.id === OFFICIAL_PROVIDER_ID
+  const locked = isBuiltInChoice(entry.id)
   return (
     <li className={`${SECTION_CLASS}-row`} aria-label={entry.label}>
       <span className={`${SECTION_CLASS}-name`}>
