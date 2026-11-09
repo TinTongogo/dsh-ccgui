@@ -236,6 +236,8 @@ CLI 注册为 DSH 的模型提供方，不需要改 agent loop。一轮 CLI 回�
 - Claude Code 不上报“运行中”。插件在命令的上报停下 1 秒后就显示它，否则长命令运行时界面一片空白。其他工具要等询问审批或完成时才显示，避免冻结一张没有 diff 的卡片。
 - 模型列表来自 ACP 的 `configOptions`。它只在会话上报告，所以第一次选中某个 CLI 时插件会开一个临时会话询问，不发消息、不调用模型，清理放在后台。没选过的 CLI 不会被启动。换模型在每轮开始前用 `session/set_config_option`。
 - 写死版本且已缓存的 `npx` 包直接运行；缓存不完整、版本不符、`.npmrc` 改过缓存目录或在 Windows 上时仍交给 `npx`。
+- Windows 上 DSH 不经过命令行启动进程，起不来 `npx`、`codebuddy` 这类 `.cmd` 包装脚本。插件按 `PATH` 和 `PATHEXT` 找到实际文件：`.exe` 直接运行，npm / pnpm 生成的 `.cmd` 读出它要运行的脚本和解释器（`node`，或 OMP CLI 这类包用的 `bun`），直接用解释器启动；解释器本身也是 `.cmd` 时会继续往下找。其他批处理脚本无法这样启动，需要把 `command` 配成 `.exe` 或脚本解释器的完整路径。
+- macOS 上从 Dock 打开的 DSH 只有系统默认的 `PATH`，看不到 nvm、fnm、Volta 装的 node，`npx` 系的 CLI 会以退出码 127 失败。插件启动时在后台向登录 shell 读一次 `PATH`；读到之前或读取失败时，在原 `PATH` 后补上 Homebrew、nvm、Volta、bun 等常见目录。agent 配置的 `env` 里写了 `PATH` 时以配置为准。
 - 权限请求转给 DSH 审批界面。CLI 的会话 ID 存在会话日志里，重启后优先用 `session/resume` 接回。
 - 一条用户消息最多发给 CLI 一次，重发可能让它重复做事，所以重试是关闭的。
 - DSH 这一轮一结束（包括在两步之间按停止），插件就取消 CLI 的回合并丢弃剩余输出。
