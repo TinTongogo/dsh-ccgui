@@ -14,7 +14,8 @@ import { errorMessage } from './outcomes.ts'
 /** Used when a CLI reports no model option, as some do when resuming. */
 const CONVENTIONAL_MODEL_OPTION_ID = 'model'
 
-type ConfigOptions = Parameters<typeof readModelList>[0]
+/** Configuration options as a CLI reports them. */
+export type ConfigOptions = Parameters<typeof readModelList>[0]
 
 /** Where a model switch is sent. */
 export interface ModelTarget {
@@ -32,7 +33,14 @@ export class ModelState {
   /** The CLI's model as far as is known; unset while a change is unconfirmed. */
   private active: string | undefined
 
-  constructor(private readonly knownModels?: () => CliModelList | undefined) {}
+  /**
+   * @param knownModels - what the CLI reported ahead of any session.
+   * @param onOptions - told every set of options the CLI reports, which carry more than the model.
+   */
+  constructor(
+    private readonly knownModels?: () => CliModelList | undefined,
+    private readonly onOptions?: (options: ConfigOptions) => void,
+  ) {}
 
   /**
    * Only a new session says what `default` stands for: a resumed one reports the model it
@@ -43,11 +51,13 @@ export class ModelState {
     this.optionId = list?.configId
     this.active = list?.current
     if (isNewSession) this.cliDefault = list?.current
+    this.onOptions?.(options)
   }
 
   /** The CLI reported a change of its own. */
   observe(options: ConfigOptions): void {
     this.active = readModelList(options)?.current ?? this.active
+    this.onOptions?.(options)
   }
 
   /**
@@ -66,6 +76,8 @@ export class ModelState {
     this.active = undefined
     try {
       const options = await abortable(where.transport.setConfigOption(where.acpSessionId, optionId, target), signal)
+      // A new model can bring other reasoning levels, reported in the same answer.
+      this.onOptions?.(options)
       const confirmed = readModelList(options)?.current
       if (confirmed !== undefined && confirmed !== target) throw new Error(`CLI 仍在使用 ${confirmed}`)
       this.active = target

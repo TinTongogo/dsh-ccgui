@@ -18,13 +18,17 @@ import { LlmError } from '@deepseek-ai/dsh-llm'
 import type { RequestMessage, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { abortable } from './abortable.ts'
 import { AsyncQueue } from './async-queue.ts'
+import { readEffortList, readModelList } from './model-options.ts'
+import type { CliEffortList } from './model-options.ts'
 import { nativeReplayState, readNativeSession, unseenUserInput } from './request-input.ts'
 import type { UserInput } from './request-input.ts'
 import { toPromptBlocks } from './prompt-images.ts'
 import { openSession, withinStartTimeout } from './session/connect.ts'
 import { driveTool } from './session/drive-tool.ts'
 import type { AskPermission } from './session/drive-tool.ts'
+import { EffortState } from './session/effort-state.ts'
 import { ModelState } from './session/model-state.ts'
+import type { ConfigOptions } from './session/model-state.ts'
 import { errorMessage } from './session/outcomes.ts'
 import type { ReplayFields } from './session/outcomes.ts'
 import { CANCELLED, PermissionQueue } from './session/permission-queue.ts'
@@ -52,6 +56,7 @@ export class CliSession {
   private readonly tools: ToolMirror
   private readonly permissions = new PermissionQueue()
   private readonly model: ModelState
+  private readonly effort: EffortState
   private readonly turns: TurnQueue
   private seen: ReadonlySet<string>
   private transport: AcpTransport | undefined
@@ -65,12 +70,15 @@ export class CliSession {
   private disposeRequested = false
   /** This dead session holds user input it can no longer deliver. */
   private owesInput = false
+  /** Levels the CLI reported, by model, not yet passed on; see `onEfforts`. */
+  private heldEfforts: ReadonlyMap<string, CliEffortList | undefined> = new Map()
 
   constructor(private readonly options: CliSessionOptions) {
     this.label = options.label
     this.startTimeoutMs = options.startTimeoutMs ?? DEFAULT_START_TIMEOUT_MS
     this.seen = options.sentMessageIds ?? new Set()
-    this.model = new ModelState(options.knownModels)
+    this.model = new ModelState(options.knownModels, (reported) => this.noteOptions(reported))
+    this.effort = new EffortState((reported) => this.model.observe(reported))
     this.tools = new ToolMirror({
       mintCallId: options.mintCallId ?? (() => `cli-${randomUUID()}`),
       settleMs: options.toolSettleMs ?? DEFAULT_TOOL_SETTLE_MS,
@@ -90,6 +98,7 @@ export class CliSession {
       onEnd: (event, wasCancelling) => {
         this.tools.failOpen()
         this.permissions.cancelAll()
+        this.releaseEfforts()
         if (!wasCancelling) this.events.push(event)
       },
       onCancelTimeout: () => {
@@ -221,7 +230,7 @@ export class CliSession {
     const blocks = await this.promptBlocks(input, signal)
     // Steering joins a turn already under way, so only a fresh prompt can switch.
     if (!this.turns.busy) {
-      await this.applyModel(request.model, signal)
+      await this.applySelection(request, signal)
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/only-throw-error -- a callback may set failure during the await, which narrowing cannot see
       if (this.failure !== undefined) throw this.failure
     }
@@ -242,10 +251,34 @@ export class CliSession {
     return blocks
   }
 
-  private async applyModel(model: string | undefined, signal: AbortSignal | undefined): Promise<void> {
+  /** The model goes first: switching it can change which reasoning levels exist. */
+  private async applySelection(
+    { model, reasoningEffort }: StreamRequest,
+    signal: AbortSignal | undefined,
+  ): Promise<void> {
     const { transport, acpSessionId, label } = this
     if (transport === undefined || acpSessionId === undefined) return
     await this.model.apply(model, { transport, acpSessionId, label }, signal)
+    const kept = await this.effort.apply(reasoningEffort, { transport, acpSessionId, label }, signal)
+    if (kept !== undefined && reasoningEffort !== undefined) {
+      this.events.push({
+        type: 'text',
+        text: `（${label} 当前模型不支持思考强度 ${reasoningEffort}，沿用 CLI 的 ${kept}。请在菜单里重新选择。）\n\n`,
+      })
+    }
+  }
+
+  /** Every report of the CLI's options passes through the model state, and lands here. */
+  private noteOptions(options: ConfigOptions): void {
+    this.effort.observe(options)
+    const model = readModelList(options)?.current
+    if (model !== undefined) this.heldEfforts = new Map([...this.heldEfforts, [model, readEffortList(options)]])
+  }
+
+  private releaseEfforts(): void {
+    const held = this.heldEfforts
+    this.heldEfforts = new Map()
+    for (const [model, effort] of held) this.options.onEfforts?.(model, effort)
   }
 
   /** Steering still in the queue is not sent yet, but must not be queued a second time. */

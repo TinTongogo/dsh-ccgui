@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionConfigOption } from '@agentclientprotocol/sdk'
-import { readModelList } from '../src/model-options.ts'
+import { readEffortList, readModelList } from '../src/model-options.ts'
 
 const select = (fields: object): SessionConfigOption => ({
   id: 'model',
@@ -176,5 +176,84 @@ describe('readModelList with values a CLI should not have sent', () => {
     expect(readModelList(asOptions([select({ category: 'model', options })]))?.options).toEqual([
       { value: 'a', name: 'A' },
     ])
+  })
+})
+
+describe('readEffortList', () => {
+  const effort = (fields: object): SessionConfigOption =>
+    select({
+      id: 'thinking',
+      category: 'thought_level',
+      currentValue: 'high',
+      options: [
+        { value: 'low', name: 'Low' },
+        { value: 'high', name: 'High' },
+      ],
+      ...fields,
+    })
+
+  it('reads the thought level option under whatever id the CLI gives it', () => {
+    expect(readEffortList([select({ category: 'model' }), effort({})])).toEqual({
+      configId: 'thinking',
+      current: 'high',
+      options: [
+        { value: 'low', name: 'Low' },
+        { value: 'high', name: 'High' },
+      ],
+    })
+  })
+
+  // The category is the only thing ACP fixes; an id that merely looks right is not enough.
+  it('ignores an option without the thought level category', () => {
+    expect(readEffortList([effort({ category: 'model_config', id: 'effort' })])).toBeUndefined()
+  })
+
+  it('reads nothing from a CLI that reports no options', () => {
+    expect(readEffortList(undefined)).toBeUndefined()
+    expect(readEffortList(null)).toBeUndefined()
+  })
+
+  it('reads nothing from an option with no usable levels or no current value', () => {
+    expect(readEffortList([effort({ options: [{ value: '', name: 'x' }] })])).toBeUndefined()
+    expect(readEffortList([effort({ currentValue: '' })])).toBeUndefined()
+  })
+
+  it('drops repeated levels, which the harness would reject', () => {
+    const options = [
+      { value: 'low', name: 'Low' },
+      { value: 'low', name: 'Low again' },
+    ]
+    expect(readEffortList([effort({ currentValue: 'low', options })])?.options).toEqual([{ value: 'low', name: 'Low' }])
+  })
+})
+
+describe('readModelList with thought levels', () => {
+  const thinking: SessionConfigOption = {
+    id: 'thinking',
+    name: 'Thinking',
+    type: 'select',
+    category: 'thought_level',
+    currentValue: 'max',
+    options: [
+      { value: 'high', name: 'High' },
+      { value: 'max', name: 'Max' },
+    ],
+  }
+
+  it('records the levels of the model that is active', () => {
+    expect(readModelList([select({ category: 'model' }), thinking])?.efforts).toEqual({
+      a: {
+        configId: 'thinking',
+        current: 'max',
+        options: [
+          { value: 'high', name: 'High' },
+          { value: 'max', name: 'Max' },
+        ],
+      },
+    })
+  })
+
+  it('leaves levels out for a CLI that offers none', () => {
+    expect(readModelList([select({ category: 'model' })])).not.toHaveProperty('efforts')
   })
 })

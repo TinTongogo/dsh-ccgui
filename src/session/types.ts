@@ -5,7 +5,7 @@
  */
 
 import type { RequestMessage } from '@deepseek-ai/dsh-llm'
-import type { CliModelList } from '../model-options.ts'
+import type { CliEffortList, CliModelList } from '../model-options.ts'
 import type { ReadImage } from '../prompt-images.ts'
 import type { AcpTransport, TransportHandlers } from '../transport.ts'
 import type { TurnEnd } from './turn-queue.ts'
@@ -29,6 +29,11 @@ export interface CliSessionOptions {
   readonly toolSettleMs?: number
   /** What this CLI reported about its models when asked ahead of any session. */
   readonly knownModels?: () => CliModelList | undefined
+  /**
+   * Told the reasoning levels of each model the CLI reported, undefined for none. Held until
+   * the CLI's turn ends: the harness checks the level on every step against the catalog.
+   */
+  readonly onEfforts?: (model: string, effort: CliEffortList | undefined) => void
   /** Reads pasted images from the harness; absent when it has no attachment service. */
   readonly readImage?: ReadImage
   /** Receives failures that have no caller left to reject. */
@@ -49,6 +54,8 @@ export interface StreamRequest {
   readonly currentTurnMessageIds?: ReadonlySet<string>
   /** The model selected in the harness; omitted or `default` means the CLI's own. */
   readonly model?: string
+  /** The reasoning level selected in the harness, or its default filled in; omitted leaves the CLI's own. */
+  readonly reasoningEffort?: string
   readonly signal?: AbortSignal
 }
 

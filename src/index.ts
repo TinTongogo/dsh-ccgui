@@ -189,6 +189,7 @@ export default class CliBridge extends Service {
           currentTurnMessageIds: (sessionId) => registry.currentTurnMessageIds(sessionId),
           modelsFor: (provider) => catalog.listModels(provider),
           modelName: (provider, model) => catalog.modelName(provider, model),
+          reasoningFor: (provider, model) => catalog.reasoning(provider, model),
         }),
       )
     }
@@ -312,6 +313,7 @@ export default class CliBridge extends Service {
       cancelGraceMs: this.config.cancelGraceMs,
       startTimeoutMs: this.config.startTimeoutMs,
       knownModels: () => this.catalog.known(provider),
+      onEfforts: (model, effort) => this.catalog.learnEfforts(provider, model, effort),
       readImage: (ref, signal) => this.readImage(ref, signal),
       onError: (error) => this.ctx.logger.warn(`ccgui: ${agent.name}: ${String(error)}`),
       openTransport: (handlers) => this.openTransport(agent, cwd, handlers),

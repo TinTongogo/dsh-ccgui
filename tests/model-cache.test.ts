@@ -17,6 +17,28 @@ const LIST: CliModelList = {
 const scratch = () => join(mkdtempSync(join(tmpdir(), 'ccgui-cache-')), 'nested', 'models.json')
 
 describe('parseModelCache', () => {
+  describe('reasoning levels', () => {
+    const LEVELS = { configId: 'thinking', current: 'high', options: [{ value: 'high', name: 'High' }] }
+
+    it('reads the levels each model reported, including models seen to have none', () => {
+      const list = { ...LIST, efforts: { small: LEVELS, large: null } }
+      const text = JSON.stringify({ version: 1, lists: { 'cli-x': list } })
+      expect(parseModelCache(text).get('cli-x')).toEqual(list)
+    })
+
+    // Levels only add to the menu; a bad record of them must not cost the models themselves.
+    it('drops malformed levels but keeps the list', () => {
+      const efforts = { small: { ...LEVELS, options: [] }, large: { ...LEVELS, configId: '' }, fast: 'x', ok: LEVELS }
+      const text = JSON.stringify({ version: 1, lists: { 'cli-x': { ...LIST, efforts } } })
+      expect(parseModelCache(text).get('cli-x')).toEqual({ ...LIST, efforts: { ok: LEVELS } })
+    })
+
+    it('leaves levels out when the record of them is not an object', () => {
+      const text = JSON.stringify({ version: 1, lists: { 'cli-x': { ...LIST, efforts: [] } } })
+      expect(parseModelCache(text).get('cli-x')).toEqual(LIST)
+    })
+  })
+
   it('reads what was written', () => {
     const text = JSON.stringify({ version: 1, lists: { 'cli-x': LIST } })
     expect(parseModelCache(text)).toEqual(new Map([['cli-x', LIST]]))

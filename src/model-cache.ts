@@ -8,7 +8,7 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import type { CliModelList, CliModelOption } from './model-options.ts'
+import type { CliEffortList, CliModelList, CliModelOption } from './model-options.ts'
 
 /** Bumped when the layout changes; a file of another version is ignored, not misread. */
 const CACHE_VERSION = 1
@@ -21,14 +21,34 @@ function readOption(value: unknown): CliModelOption | undefined {
   return { value: value.value, name: value.name }
 }
 
+type OptionList = Omit<CliModelList, 'efforts'>
+
 /** Checked as strictly as a live answer: one empty id makes the harness drop the whole CLI. */
-function readList(value: unknown): CliModelList | undefined {
+function readOptions(value: unknown): OptionList | undefined {
   if (!isObject(value) || !isText(value.configId) || !isText(value.current) || !Array.isArray(value.options)) {
     return undefined
   }
   const options = (value.options as readonly unknown[]).map(readOption)
   if (options.length === 0 || options.some((option) => option === undefined)) return undefined
   return { configId: value.configId, current: value.current, options: options.filter((option) => option !== undefined) }
+}
+
+/** Levels only add to the menu, so a bad entry loses that model's levels, not the list. */
+function readEfforts(value: unknown): Readonly<Record<string, CliEffortList | null>> | undefined {
+  if (!isObject(value) || Array.isArray(value)) return undefined
+  const entries = Object.entries(value).flatMap(([model, effort]): [string, CliEffortList | null][] => {
+    if (effort === null) return [[model, null]]
+    const read = readOptions(effort)
+    return read === undefined ? [] : [[model, read]]
+  })
+  return entries.length === 0 ? undefined : Object.fromEntries(entries)
+}
+
+function readList(value: unknown): CliModelList | undefined {
+  const list = readOptions(value)
+  if (list === undefined || !isObject(value)) return undefined
+  const efforts = readEfforts(value.efforts)
+  return efforts === undefined ? list : { ...list, efforts }
 }
 
 function parseJson(text: string): unknown {

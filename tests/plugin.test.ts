@@ -342,7 +342,6 @@ describe('CliBridge routing and model listing', () => {
     await vi.waitFor(() => expect(h.modelUpdates).toEqual(['cli-fake']), WAIT)
     await expect(onlyAdapter(h).listModels('cli-fake')).resolves.toEqual([
       { provider: 'cli-fake', id: DEFAULT_MODEL_ID, name: 'Fake Small（默认）' },
-      { provider: 'cli-fake', id: 'fake-small', name: 'Fake Small' },
       { provider: 'cli-fake', id: 'fake-large', name: 'Fake Large' },
     ])
     // The probe runs in a fixed directory under the harness home, started through ctx.subprocess.
@@ -433,7 +432,7 @@ describe('CliBridge routing and model listing', () => {
     h.adapters.length = 0
     await start(h)
     await vi.waitFor(() => expect(h.modelUpdates).toEqual(['cli-fake', 'cli-fake']), WAIT)
-    await expect(onlyAdapter(h).listModels('cli-fake')).resolves.toHaveLength(3)
+    await expect(onlyAdapter(h).listModels('cli-fake')).resolves.toHaveLength(2)
     expect(h.subprocess.spawned).toHaveLength(1)
   })
 
