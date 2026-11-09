@@ -241,6 +241,25 @@ describe('CliSession stopped while starting', () => {
     await expect(collect(session.stream({ messages: [user('1', 'x')] }))).rejects.toThrow('请确认它已安装')
   })
 
+  // Reinstalling does not fix a broken npx cache, so the install hint would send the user the wrong way.
+  it('names the npx cache to delete when the install there is incomplete', async () => {
+    const { fake, session } = setup()
+    const died = new Error(
+      'exited with code 1: file:///Users/u/.npm/_npx/c51fd8e4/node_modules/@openai/codex/bin/codex.js:107 ' +
+        'Error: Missing optional dependency @openai/codex-darwin-arm64.',
+    )
+    fake.initialize = () => {
+      fake.close(died)
+      return Promise.reject(died)
+    }
+    const failure = collect(session.stream({ messages: [user('1', 'x')] }))
+    await expect(failure).rejects.toMatchObject({
+      code: 'CLI_START_FAILED',
+      message: expect.stringContaining('请删除 /Users/u/.npm/_npx/c51fd8e4 后重试') as unknown,
+    })
+    await expect(failure).rejects.not.toThrow('请确认它已安装')
+  })
+
   it('does not send to a CLI that exits right after starting', async () => {
     const { fake, session } = setup()
     const newSession = fake.newSession.bind(fake)
