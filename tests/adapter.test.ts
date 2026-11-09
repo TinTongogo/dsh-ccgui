@@ -1,12 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
+import { LlmError, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { CliBridgeAdapter, DEFAULT_MODEL_ID } from '../src/adapter.ts'
 import type { CliSession } from '../src/cli-session.ts'
+import type { PtcWrap } from '../src/session/ptc-call.ts'
 
 const FINISH: StreamChunk = { type: 'finish', reason: { kind: 'stop' } }
+const LEVELS = { efforts: [{ id: ReasoningEffortId('high'), name: 'High' }], defaultEffort: ReasoningEffortId('high') }
 const CURRENT_TURN: ReadonlySet<string> = new Set(['m1'])
 
-function setup() {
+function setup(ptcWrapFor: (provider: string, sessionId: string) => PtcWrap | undefined = () => undefined) {
   const stream = vi.fn(async function* (): AsyncGenerator<StreamChunk> {
     yield FINISH
   })
@@ -14,12 +17,14 @@ function setup() {
   const adapter = new CliBridgeAdapter({
     labelFor: (provider) => (provider === 'cli-x' ? 'X CLI' : undefined),
     resolveSession,
+    ptcWrapFor: vi.fn(ptcWrapFor),
     currentTurnMessageIds: () => CURRENT_TURN,
     modelsFor: (provider) => [
       { provider, id: DEFAULT_MODEL_ID, name: 'Small（默认）' },
       { provider, id: 'large', name: 'Large' },
     ],
     modelName: (_provider, model) => (model === 'large' ? 'Large' : model),
+    reasoningFor: (_provider, model) => (model === 'large' ? LEVELS : undefined),
   })
   return { adapter, stream, resolveSession }
 }
@@ -55,6 +60,12 @@ describe('CliBridgeAdapter catalog', () => {
     ])
   })
 
+  // The harness checks a chosen level against this before the request reaches the adapter.
+  it('declares the levels of a resolved model', async () => {
+    await expect(setup().adapter.resolveModel('cli-x', 'large')).resolves.toMatchObject({ reasoning: LEVELS })
+    await expect(setup().adapter.resolveModel('cli-x', DEFAULT_MODEL_ID)).resolves.not.toHaveProperty('reasoning')
+  })
+
   it('names a resolved model', async () => {
     await expect(setup().adapter.resolveModel('cli-x', 'large')).resolves.toMatchObject({ id: 'large', name: 'Large' })
   })
@@ -82,6 +93,27 @@ describe('CliBridgeAdapter.stream', () => {
     await expect(collect(adapter.stream(request({ messages, signal, model: 'large' })))).resolves.toEqual([FINISH])
     expect(resolveSession).toHaveBeenCalledWith('cli-x', 'dsh-1')
     expect(stream).toHaveBeenCalledWith({ messages, signal, model: 'large', currentTurnMessageIds: CURRENT_TURN })
+  })
+
+  it('forwards the chosen reasoning level', async () => {
+    const { adapter, stream } = setup()
+    await collect(adapter.stream(request({ model: 'large', reasoningEffort: ReasoningEffortId('high') })))
+    expect(stream).toHaveBeenCalledWith(expect.objectContaining({ reasoningEffort: 'high' }))
+  })
+
+  it('tells the session to wrap its tool calls in a PTC session', async () => {
+    const { adapter, stream } = setup(() => ({ timeoutMs: 600_000 }))
+    await collect(adapter.stream(request()))
+    expect(stream).toHaveBeenCalledWith(expect.objectContaining({ ptc: { timeoutMs: 600_000 } }))
+  })
+
+  // Checked before the session is resolved, so a CLI that cannot run here is never started.
+  it('refuses before starting the CLI when the PTC runtime cannot host it', async () => {
+    const { adapter, resolveSession } = setup(() => {
+      throw new LlmError('no', 'CLI_WRONG_PRESET')
+    })
+    await expect(collect(adapter.stream(request()))).rejects.toMatchObject({ code: 'CLI_WRONG_PRESET' })
+    expect(resolveSession).not.toHaveBeenCalled()
   })
 
   it('refuses a request with no session', async () => {

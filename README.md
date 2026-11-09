@@ -1,6 +1,6 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./assets/illustrations/01-hero-dark.webp" />
-  <img alt="DSH 截图：输入框旁的 CLI 菜单列出 Claude Code、Codex CLI、PI CLI、OMP CLI、OpenCode、CodeBuddy CLI" src="./assets/illustrations/01-hero-light.webp" />
+  <img alt="DSH 截图：输入框旁的 CLI 菜单列出 Claude Code、Kimi CLI、Codex CLI、PI CLI、OMP CLI、OpenCode" src="./assets/illustrations/01-hero-light.webp" />
 </picture>
 
 ---
@@ -10,7 +10,7 @@
 
 # DSH CCGUI
 
-**在 DeepSeek Harness 里直接使用 Claude Code、Codex、PI、OMP 等 Agent CLI**
+**在 DeepSeek Harness 里直接使用 Claude Code、Kimi、Codex、PI、OMP 等 Agent CLI**
 
 [![CI][ci-shield]][ci-link] [![Coverage][coverage-shield]][coverage-link] [![License][license-shield]][license-link] ![DSH][dsh-shield]
 
@@ -81,7 +81,7 @@ CLI 和模型各有一个菜单。模型菜单列出当前 CLI 真实可用的�
 - 没安装的 CLI 也会列出来，发消息时提示无法启动。
 - 选中 CLI 后插件才启动它询问模型，刚选中时菜单里只有它的名字，通常 1 秒左右换成真实列表；`npx` 启动的 CLI 第一次还要等下载。
 - 费用和账号都走 CLI 自己的配置。比如 Codex 配了中转服务时，菜单里的模型不一定都能用，错误会原样显示。
-- 只能在标准模式下使用。PTC 模式只接受 `run_code`，会提示切回标准模式。
+- 标准模式和 PTC 模式都能用。PTC 模式只接受 `run_code`，所以 CLI 的每次工具调用会包成一个 `run_code` 程序，工具卡片显示为 `run_code`，不是终端或 diff 卡片。单次工具调用（包括等你审批的时间）受 PTC 运行时的超时上限约束，超时会取消 CLI 这一轮，跑很久的构建或测试建议切回标准模式。PTC 运行时不是 TypeScript 函数体格式时无法包装，会提示切回标准模式。
 
 </details>
 
@@ -127,7 +127,7 @@ DSH 设置里的「CC GUI 设置」可以调整 CLI 菜单的顺序和开关，�
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./assets/illustrations/08-settings-dark.webp" />
-  <img alt="CC GUI 设置截图：CLI 列表的顺序和开关，后面是界面交互的开关" src="./assets/illustrations/08-settings-light.webp" />
+  <img alt="CC GUI 设置截图：CLI 列表（Claude Code、Kimi CLI、Codex CLI 等）的顺序和开关，后面是界面交互的开关" src="./assets/illustrations/08-settings-light.webp" />
 </picture>
 
 <details>
@@ -153,12 +153,12 @@ DSH 设置里的「CC GUI 设置」可以调整 CLI 菜单的顺序和开关，�
 | CLI | 写文件和执行命令 | 按停止 |
 | --- | --- | --- |
 | Claude Code | auto 模式不询问；手动模式走 DSH 审批卡片 | 命令结束；**放到后台的命令继续跑** |
+| Kimi CLI | 尚未验证 | 尚未验证 |
 | Codex CLI | 不询问，直接执行 | 回合结束；**已启动的命令继续跑** |
 | PI CLI | 不询问，直接执行 | 命令结束 |
 | OMP CLI | 不询问，直接执行 | 回合结束 |
 | OpenCode | 按它的权限配置询问，走 DSH 审批卡片 | 命令结束 |
 | CodeBuddy CLI | 尚未验证 | 尚未验证 |
-| Kimi CLI | 尚未验证 | 尚未验证 |
 
 继续跑的后台命令在会话关闭时才结束。表中是默认配置下在一台机器上的实测结果，配置和版本不同结果也可能不同。
 

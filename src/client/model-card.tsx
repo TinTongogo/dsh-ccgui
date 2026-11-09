@@ -9,8 +9,10 @@
 import type { CSSProperties, ReactElement, RefObject } from 'react'
 import { IconCheckOutlineRegular, Input, MenuSurface, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { DirectorySelection } from './choices.ts'
+import { MarkGlyph } from './marks.tsx'
 import { isRow, rowCount } from './menu-models.ts'
 import type { MenuModels, MenuRow, MenuSection } from './menu-models.ts'
+import { modelMarkOf } from './model-marks.ts'
 import {
   HEADING_CLASS,
   HINT_CLASS,
@@ -18,6 +20,7 @@ import {
   ROW_ACTIVE_CLASS,
   ROW_CHECK_CLASS,
   ROW_CLASS,
+  ROW_MARK_CLASS,
   ROW_NAME_CLASS,
   ROWS_CLASS,
   SEARCH_CLASS,
@@ -30,6 +33,7 @@ const MENU_LABEL = '模型'
 const SEARCH_LABEL = '搜索模型…'
 const NO_MATCH_LABEL = '没有匹配的模型。'
 const NO_MODELS_LABEL = '暂无可用模型'
+const ROW_MARK_SIZE = 14
 
 interface ModelRowProps {
   readonly domId: string
@@ -44,6 +48,7 @@ interface ModelRowProps {
 
 function ModelRow({ domId, model, selected, settling, active, busy, onHover, onChoose }: ModelRowProps): ReactElement {
   const check = selected ? <IconCheckOutlineRegular /> : null
+  const mark = modelMarkOf(model)
   return (
     <button
       type="button"
@@ -57,6 +62,8 @@ function ModelRow({ domId, model, selected, settling, active, busy, onHover, onC
       onMouseMove={active || busy ? undefined : onHover}
       onClick={onChoose}
     >
+      {/* The slot stays when there is no mark, so every name starts at the same place. */}
+      <span className={ROW_MARK_CLASS}>{mark === undefined ? null : <MarkGlyph id={mark} size={ROW_MARK_SIZE} />}</span>
       <span className={ROW_NAME_CLASS}>{model.name}</span>
       <span className={ROW_CHECK_CLASS}>{settling ? <StateDot state="ongoing" /> : check}</span>
     </button>
@@ -122,7 +129,7 @@ function ModelRows({ id, models, sections, active, pending, onHighlight, onChoos
     <div id={`${id}-rows`} className={`${ROWS_CLASS} scrollable`} role="menu" aria-label={MENU_LABEL}>
       {sections.map((section, sectionIndex) => (
         <div key={section.id} role="none">
-          {models.headed && (
+          {section.headed && (
             <div className={HEADING_CLASS} role="presentation">
               {section.name}
             </div>

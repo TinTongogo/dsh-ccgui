@@ -342,7 +342,6 @@ describe('CliBridge routing and model listing', () => {
     await vi.waitFor(() => expect(h.modelUpdates).toEqual(['cli-fake']), WAIT)
     await expect(onlyAdapter(h).listModels('cli-fake')).resolves.toEqual([
       { provider: 'cli-fake', id: DEFAULT_MODEL_ID, name: 'Fake Small（默认）' },
-      { provider: 'cli-fake', id: 'fake-small', name: 'Fake Small' },
       { provider: 'cli-fake', id: 'fake-large', name: 'Fake Large' },
     ])
     // The probe runs in a fixed directory under the harness home, started through ctx.subprocess.
@@ -433,7 +432,7 @@ describe('CliBridge routing and model listing', () => {
     h.adapters.length = 0
     await start(h)
     await vi.waitFor(() => expect(h.modelUpdates).toEqual(['cli-fake', 'cli-fake']), WAIT)
-    await expect(onlyAdapter(h).listModels('cli-fake')).resolves.toHaveLength(3)
+    await expect(onlyAdapter(h).listModels('cli-fake')).resolves.toHaveLength(2)
     expect(h.subprocess.spawned).toHaveLength(1)
   })
 
@@ -612,6 +611,44 @@ describe('CliBridge sessions', () => {
     await expect(
       collect(onlyAdapter(h).stream(request({ provider: 'cli-broken', messages: [user('m1', 'hello')] }))),
     ).rejects.toMatchObject({ code: 'CLI_START_FAILED', message: /Broken CLI/ })
+  })
+})
+
+const PTC_RUNTIME = { language: 'typescript', programFormat: 'function-body', timeout: { defaultMs: 1, maxMs: 9_000 } }
+
+describe('CliBridge in PTC mode', () => {
+  it('sends a CLI call as run_code and runs its mirror under the nested id', async () => {
+    const h = harness()
+    h.root.provide('approval', { request: () => Promise.resolve('allowed-once' as const) })
+    h.root.provide('ptcRuntime', PTC_RUNTIME)
+    await start(h)
+    const cwd = mkdtempSync(join(tmpdir(), 'ccgui-cwd-'))
+    const { agent } = addAgent(h, { cwd, preset: 'ptc' })
+    openTurn(h, 'dsh-1', ['m1'])
+    const chunks = await collect(onlyAdapter(h).stream(request({ messages: [user('m1', 'WRITE out.txt')] })))
+    const call = toolCallOf(chunks)
+    expect(call).toMatchObject({ name: 'run_code', args: { timeoutMs: 9_000 } })
+    const exec = fake<ToolRunContext>({
+      agent,
+      callId: fake<ToolRunContext['callId']>(`${call.id}:ptc:1`),
+      signal: AbortSignal.timeout(10_000),
+    })
+    // The arguments the program hands the mirror tool binding.
+    const forwarded = /tools\.cli_tool\((.*)\)\)\.text$/s.exec(String(call.args.code))?.[1] ?? '{}'
+    const result = onlyTool(h).definition.execute(JSON.parse(forwarded) as Record<string, unknown>, exec)
+    await expect(result).resolves.toMatchObject({ text: 'Created out.txt' })
+    expect(readFileSync(join(cwd, 'out.txt'), 'utf8')).toBe('hi\n')
+  })
+
+  it('refuses without starting the CLI when the PTC runtime cannot run the program', async () => {
+    const h = harness()
+    h.root.provide('ptcRuntime', { ...PTC_RUNTIME, language: 'python' })
+    await start(h)
+    addAgent(h, { preset: 'ptc' })
+    openTurn(h, 'dsh-1', ['m1'])
+    const stream = onlyAdapter(h).stream(request({ messages: [user('m1', 'hello')] }))
+    await expect(collect(stream)).rejects.toMatchObject({ code: 'CLI_WRONG_PRESET' })
+    expect(h.subprocess.spawned).toEqual([])
   })
 })
 

@@ -11,6 +11,8 @@ import { closeOpenBlock, toolCallChunks } from '../stream-blocks.ts'
 import type { BlockState, BlockTransition } from '../stream-blocks.ts'
 import { toCliToolArgs } from '../tool-record.ts'
 import type { ToolRecord } from '../tool-record.ts'
+import { ptcCall } from './ptc-call.ts'
+import type { PtcWrap, StreamToolCall } from './ptc-call.ts'
 
 /** Extra fields every `finish` chunk carries so the harness can resume the native session. */
 export type ReplayFields = Partial<Pick<Extract<StreamChunk, { type: 'finish' }>, 'replayState'>>
@@ -52,16 +54,18 @@ function finishReason(stopReason: StopReason, label: string): FinishReason {
   }
 }
 
+function mirroredCall(record: ToolRecord): StreamToolCall {
+  return { id: record.callId, name: CLI_TOOL_NAME, arguments: JSON.stringify(toCliToolArgs(record)) }
+}
+
 /**
  * End a harness step at a tool call the harness should run as the mirror tool.
+ * @param ptc - set in a PTC session, where the call goes out wrapped in `run_code`.
  * @returns the tool-call chunks followed by a `tool-calls` finish.
  */
-export function toolCallStep(blocks: BlockState, record: ToolRecord, replay: ReplayFields): StepResult {
-  const { state, chunks } = toolCallChunks(blocks, {
-    id: record.callId,
-    name: CLI_TOOL_NAME,
-    arguments: JSON.stringify(toCliToolArgs(record)),
-  })
+export function toolCallStep(blocks: BlockState, record: ToolRecord, replay: ReplayFields, ptc?: PtcWrap): StepResult {
+  const call = ptc === undefined ? mirroredCall(record) : ptcCall(record, ptc)
+  const { state, chunks } = toolCallChunks(blocks, call)
   return { state, chunks: [...chunks, { type: 'finish', reason: { kind: 'tool-calls' }, ...replay }], done: true }
 }
 

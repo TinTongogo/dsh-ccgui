@@ -11,6 +11,7 @@ import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import type { CliSession, PermissionAsk } from './cli-session.ts'
 import { CLI_TOOL_NAME, cliRoute, DEFAULT_MODEL_ID } from './constants.ts'
+import type { PtcWrap } from './session/ptc-call.ts'
 import type { ToolOutcome } from './tool-record.ts'
 
 /** One CLI that speaks ACP over stdio. */
@@ -39,6 +40,8 @@ export interface RegistryDeps {
   getAgent(sessionId: string): Agent | undefined
   /** The preset this agent runs under, if any. */
   composedPreset(agent: Agent): string | undefined
+  /** How the host's PTC runtime takes a mirrored call; undefined when it cannot. */
+  ptcWrap(): PtcWrap | undefined
   ask(agent: Agent, request: PermissionAsk, signal: AbortSignal): Promise<ApprovalOutcome>
   warn(message: string): void
   /** Someone chose this CLI, so starting it is now acceptable. */
@@ -58,7 +61,7 @@ interface LiveSession {
 }
 
 const NO_MESSAGES: ReadonlySet<string> = new Set()
-/** This preset's tool executor only accepts `run_code`, so it refuses every mirrored call. */
+/** This preset's tool executor only accepts `run_code`, so mirrored calls go out wrapped in it. */
 const PTC_PRESET = 'ptc'
 
 function without<K, V>(map: ReadonlyMap<K, V>, key: K): ReadonlyMap<K, V> {
@@ -162,6 +165,23 @@ export class CliSessionRegistry {
   }
 
   /**
+   * Decide whether a step's tool calls go out wrapped in `run_code`.
+   * @param provider - the requested CLI route.
+   * @param sessionId - the harness session.
+   * @returns the wrap in PTC mode, otherwise undefined.
+   * @throws when the PTC runtime cannot run the wrapping program: every mirrored call
+   *   would be refused while the CLI carried on doing the work unseen.
+   */
+  ptcWrapFor(provider: string, sessionId: string): PtcWrap | undefined {
+    const agent = this.deps.getAgent(sessionId)
+    if (agent === undefined || this.deps.composedPreset(agent) !== PTC_PRESET) return undefined
+    const wrap = this.deps.ptcWrap()
+    if (wrap !== undefined) return wrap
+    const name = this.labelFor(provider) ?? provider
+    throw new LlmError(`${name} 不支持当前的 PTC 运行时，请切回标准模式。`, 'CLI_WRONG_PRESET')
+  }
+
+  /**
    * Find or create the CLI session for a harness session.
    * @param provider - the requested CLI route.
    * @param sessionId - the harness session.
@@ -172,9 +192,6 @@ export class CliSessionRegistry {
     if (config === undefined) throw new LlmError(`未知的 CLI 路由：${provider}`, 'CLI_START_FAILED')
     const agent = this.deps.getAgent(sessionId)
     if (agent === undefined) throw new LlmError(`找不到会话 ${sessionId}。`, 'CLI_START_FAILED')
-    if (this.deps.composedPreset(agent) === PTC_PRESET) {
-      throw new LlmError(`${config.name} 不能在 PTC 模式下运行，请切回标准模式。`, 'CLI_WRONG_PRESET')
-    }
     const current = this.sessions.get(sessionId)
     if (current?.provider === provider && !current.session.replaceable) return current.session
     this.stopSession(sessionId)

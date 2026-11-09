@@ -179,11 +179,12 @@ await scenario('position: the switcher sits between the + button and the permiss
     throw new Error(`order: + ${left}, switcher ${switcher.x}, permission ${permission}`)
 })
 
+// The default row stands for Fake Small, so Fake Small gets no second row of its own.
 await scenario('models: the menu shows what the CLI reports, naming its default', async () => {
   await newCliSession(FAKE)
-  await until(async () => (await modelNames(FAKE)).length === 3, 'three model rows', 30_000)
+  await until(async () => (await modelNames(FAKE)).length === 2, 'two model rows', 30_000)
   const names = await modelNames(FAKE)
-  if (names.join() !== 'Fake Small（默认）,Fake Small,Fake Large') throw new Error(`rows: ${names.join()}`)
+  if (names.join() !== 'Fake Small（默认）,Fake Large') throw new Error(`rows: ${names.join()}`)
 })
 
 await scenario("flat menu: one click shows only this CLI's models, with no second level", async () => {
@@ -192,7 +193,7 @@ await scenario("flat menu: one click shows only this CLI's models, with no secon
   const names = await page
     .getByRole('menuitemradio')
     .evaluateAll((rows) => rows.map((row) => row.getAttribute('title')))
-  if (names.join() !== 'Fake Small（默认）,Fake Small,Fake Large') throw new Error(`rows: ${names.join()}`)
+  if (names.join() !== 'Fake Small（默认）,Fake Large') throw new Error(`rows: ${names.join()}`)
   if (
     await page
       .getByRole('menuitem', { name: /^模型/ })
@@ -216,7 +217,6 @@ await scenario("flat menu: the harness's control is out of the row", async () =>
 await scenario('flat menu: arrows move, Enter settles, and the trigger takes the name', async () => {
   await modelTrigger().click()
   await sleep(300)
-  await page.keyboard.press('ArrowDown')
   await page.keyboard.press('ArrowDown')
   await page.keyboard.press('Enter')
   await until(async () => (await modelTrigger().getAttribute('title')) === 'Fake Large', 'trigger naming Fake Large')
@@ -263,7 +263,7 @@ await scenario('model switch: the chosen model reaches the CLI before the prompt
 })
 
 await scenario('model switch mid-session: the next message runs on the new model', async () => {
-  await chooseModel(FAKE, 'Fake Small')
+  await chooseModel(FAKE, 'Fake Small（默认）')
   await send('WHICH MODEL')
   await untilText('model=fake-small')
 })
@@ -276,7 +276,7 @@ await scenario('locked: a started session keeps its CLI, and says how to change'
 
 await scenario('PTC: a CLI refuses clearly in the mode it cannot run in', async () => {
   await newSession('PTC')
-  await chooseModel(FAKE, 'Fake Small')
+  await chooseModel(FAKE, 'Fake Small（默认）')
   await send('ptc refused')
   await untilText('CLI_WRONG_PRESET')
   if (!(await bodyText()).includes('标准模式')) throw new Error('message does not name the way out')

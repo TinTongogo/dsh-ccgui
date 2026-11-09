@@ -8,6 +8,7 @@
 import type { ToolCallUpdate } from '@agentclientprotocol/sdk'
 import { commandOf, isFinished, isReadyToPublish, mergeToolUpdate } from '../tool-record.ts'
 import type { ToolRecord } from '../tool-record.ts'
+import { mirroredCallId } from './ptc-call.ts'
 
 const INTERRUPTED_OUTPUT = 'CLI 在这个工具完成之前结束了本轮。'
 
@@ -42,8 +43,12 @@ export class ToolMirror {
     return this.tools.get(acpId)
   }
 
+  /** A PTC session runs the mirror tool inside `run_code`, under an id nested in the call's own. */
   acpIdFor(callId: string): string | undefined {
-    return this.callIds.get(callId)
+    const direct = this.callIds.get(callId)
+    if (direct !== undefined) return direct
+    const outer = mirroredCallId(callId)
+    return outer === undefined ? undefined : this.callIds.get(outer)
   }
 
   isClaimed(acpId: string): boolean {

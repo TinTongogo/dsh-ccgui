@@ -7,9 +7,11 @@
  * @module dsh-ccgui/model-catalog
  */
 
-import type { LlmModelInfo } from '@deepseek-ai/dsh-llm'
+import type { LlmModelInfo, LlmModelReasoningInfo } from '@deepseek-ai/dsh-llm'
 import { DEFAULT_MODEL_ID } from './constants.ts'
-import type { CliModelList, CliModelOption } from './model-options.ts'
+import { learnEfforts, reasoningFor } from './model-efforts.ts'
+import { olderVersions } from './model-versions.ts'
+import type { CliEffortList, CliModelList, CliModelOption } from './model-options.ts'
 
 /** What the catalog needs from the bridge. */
 export interface ModelCatalogDeps {
@@ -26,10 +28,23 @@ function nameOf(list: CliModelList, value: string): string {
   return list.options.find((option) => option.value === value)?.name ?? value
 }
 
-/** The harness rejects a catalog with duplicate ids, which would drop the whole CLI. */
-function selectableOptions(options: readonly CliModelOption[]): readonly CliModelOption[] {
+/**
+ * The harness rejects a catalog with duplicate ids, which would drop the whole CLI. A model
+ * named like the default row is left out too: choosing the default switches to the model it
+ * names, so the row would repeat it. Claude Code's `opus` alias is such a row while it
+ * resolves to the same model as its `default`; if the two part ways, their names do as well.
+ * Older versions are left out as well; they stay resolvable for a session already on one.
+ */
+function selectableOptions(list: CliModelList): readonly CliModelOption[] {
+  const { options } = list
+  const defaultName = nameOf(list, list.current)
+  const older = olderVersions(options.map(({ name }) => name))
   return options.filter(
-    ({ value }, index) => value !== DEFAULT_MODEL_ID && options.findIndex((option) => option.value === value) === index,
+    ({ value, name }, index) =>
+      value !== DEFAULT_MODEL_ID &&
+      name !== defaultName &&
+      !older.has(name) &&
+      options.findIndex((option) => option.value === value) === index,
   )
 }
 
@@ -46,7 +61,7 @@ export class CliModelCatalog {
    * List a CLI's models. The default entry names the model it stands for, so the menu
    * always shows what is really in use.
    * @param provider - a CLI route.
-   * @returns the default entry, followed by the real models once they are known.
+   * @returns the default entry, followed by the other models once they are known.
    */
   listModels(provider: string): readonly LlmModelInfo[] {
     const list = this.lists.get(provider)
@@ -55,8 +70,38 @@ export class CliModelCatalog {
     }
     return [
       { provider, id: DEFAULT_MODEL_ID, name: this.defaultName(list) },
-      ...selectableOptions(list.options).map(({ value, name }) => ({ provider, id: value, name })),
+      ...selectableOptions(list).map(({ value, name }) => ({ provider, id: value, name })),
     ]
+  }
+
+  /**
+   * The reasoning levels of one model. The harness reads these through model resolution,
+   * not the listing, both for its menus and to check a chosen level.
+   * @param provider - a CLI route.
+   * @param model - a model id.
+   * @returns its levels, or undefined when none are known.
+   */
+  reasoning(provider: string, model: string): LlmModelReasoningInfo | undefined {
+    const list = this.lists.get(provider)
+    return list === undefined ? undefined : reasoningFor(list, model)
+  }
+
+  /**
+   * Record the levels a session saw on its active model, which may differ from those the
+   * menu assumed for it. Kept and saved like an answer, and the menu refreshes.
+   * @param provider - a CLI route.
+   * @param model - the model that was active.
+   * @param effort - its levels, or undefined when it offers none.
+   */
+  learnEfforts(provider: string, model: string, effort: CliEffortList | undefined): void {
+    const list = this.lists.get(provider)
+    // Without a list the menu has no models to attach levels to; the probe brings both.
+    if (list === undefined) return
+    const learned = learnEfforts(list, model, effort)
+    if (learned === list) return
+    this.lists = new Map([...this.lists, [provider, learned]])
+    this.persist()
+    this.deps.onUpdated(provider)
   }
 
   /**
@@ -90,9 +135,9 @@ export class CliModelCatalog {
     this.asked = new Set([...this.asked, provider])
     this.deps
       .probe(provider)
-      .then((list) => {
-        if (list === undefined) return
-        this.lists = new Map([...this.lists, [provider, list]])
+      .then((answer) => {
+        if (answer === undefined) return
+        this.lists = new Map([...this.lists, [provider, this.withLearned(provider, answer)]])
         this.answered = new Set([...this.answered, provider])
         this.persist()
         this.deps.onUpdated(provider)
@@ -114,6 +159,17 @@ export class CliModelCatalog {
     )
     this.lists = new Map([...this.lists, ...restored])
     for (const [provider] of restored) this.deps.onUpdated(provider)
+  }
+
+  /**
+   * The probe only sees the default model, so what sessions learned about the others still
+   * holds; for the default model the answer wins, including when it now offers no levels.
+   */
+  private withLearned(provider: string, answer: CliModelList): CliModelList {
+    const learned = this.lists.get(provider)?.efforts
+    if (learned === undefined) return answer
+    const own = answer.efforts?.[answer.current] ?? null
+    return { ...answer, efforts: { ...learned, [answer.current]: own } }
   }
 
   private persist(): void {

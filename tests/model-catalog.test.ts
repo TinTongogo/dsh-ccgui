@@ -40,15 +40,55 @@ describe('CliModelCatalog', () => {
     expect(catalog.listModels('cli-x')).toHaveLength(1)
   })
 
+  // The default row already stands for the active model, so a row of its own would repeat it.
   it('lists the real models once it knows them, naming the active one as default', async () => {
     const { catalog } = setup()
     catalog.ensureListed('cli-x')
     await settled()
     expect(catalog.listModels('cli-x')).toEqual([
       { provider: 'cli-x', id: 'default', name: 'Small（默认）' },
-      { provider: 'cli-x', id: 'small', name: 'Small' },
       { provider: 'cli-x', id: 'large', name: 'Large' },
     ])
+  })
+
+  // Claude Code lists its own `default` and the `opus` alias, which resolve to the same model.
+  it('leaves out an alias that names the same model as the default row', async () => {
+    const { catalog } = setup(() =>
+      Promise.resolve({
+        configId: 'model',
+        current: 'default',
+        options: [
+          { value: 'default', name: 'Opus 5.5' },
+          { value: 'opus', name: 'Opus 5.5' },
+          { value: 'sonnet', name: 'Sonnet 5.5' },
+        ],
+      }),
+    )
+    catalog.ensureListed('cli-x')
+    await settled()
+    expect(catalog.listModels('cli-x').map((model) => model.name)).toEqual(['Opus 5.5（默认）', 'Sonnet 5.5'])
+    expect(catalog.modelName('cli-x', 'opus')).toBe('Opus 5.5')
+  })
+
+  // Pinned older versions sit beside the current ones, read as duplicates and are of little use.
+  it('leaves out models a newer version replaces', async () => {
+    const { catalog } = setup(() =>
+      Promise.resolve({
+        configId: 'model',
+        current: 'default',
+        options: [
+          { value: 'default', name: 'Opus 5.5' },
+          { value: 'sonnet', name: 'Sonnet 5.5' },
+          { value: 'claude-opus-5', name: 'Opus 5' },
+          { value: 'claude-sonnet-4-6', name: 'Sonnet 4.6' },
+        ],
+      }),
+    )
+    catalog.ensureListed('cli-x')
+    await settled()
+    expect(catalog.listModels('cli-x').map((model) => model.name)).toEqual(['Opus 5.5（默认）', 'Sonnet 5.5'])
+    // A session already on one, resumed say, still shows its name.
+    expect(catalog.modelName('cli-x', 'claude-opus-5')).toBe('Opus 5')
   })
 
   it('tells the UI when the list arrives', async () => {
@@ -77,7 +117,7 @@ describe('CliModelCatalog', () => {
     catalog.ensureListed('cli-x')
     await settled()
     expect(deps.probe).toHaveBeenCalledTimes(2)
-    expect(catalog.listModels('cli-x')).toHaveLength(3)
+    expect(catalog.listModels('cli-x')).toHaveLength(2)
   })
 
   // An unhandled rejection would take the whole harness down.
@@ -89,7 +129,7 @@ describe('CliModelCatalog', () => {
     catalog.ensureListed('cli-x')
     await settled()
     expect(deps.warn).toHaveBeenCalledWith(expect.stringContaining('listener broke'))
-    expect(catalog.listModels('cli-x')).toHaveLength(3)
+    expect(catalog.listModels('cli-x')).toHaveLength(2)
   })
 
   it('shares what it knows with the sessions that need it', async () => {
@@ -105,11 +145,12 @@ describe('CliModelCatalog', () => {
     const { catalog } = setup(() =>
       Promise.resolve({
         configId: 'model',
-        current: 'a',
+        current: 'b',
         options: [
           { value: 'default', name: 'Auto' },
           { value: 'a', name: 'A' },
           { value: 'a', name: 'A again' },
+          { value: 'b', name: 'B' },
         ],
       }),
     )
@@ -165,7 +206,7 @@ describe('CliModelCatalog', () => {
     it('shows them at once and tells the UI', () => {
       const { catalog, deps } = setup()
       catalog.restore(new Map([['cli-x', OLD]]))
-      expect(catalog.listModels('cli-x').map((model) => model.name)).toEqual(['Old（默认）', 'Old'])
+      expect(catalog.listModels('cli-x').map((model) => model.name)).toEqual(['Old（默认）'])
       expect(catalog.known('cli-x')).toEqual(OLD)
       expect(deps.onUpdated).toHaveBeenCalledWith('cli-x')
     })
@@ -240,6 +281,89 @@ describe('CliModelCatalog', () => {
       await settled()
       expect(deps.warn).toHaveBeenCalledWith(expect.stringContaining('disk full'))
       expect(catalog.known('cli-x')).toEqual(LIST)
+    })
+  })
+
+  describe('reasoning levels', () => {
+    const THINKING = {
+      configId: 'thinking',
+      current: 'high',
+      options: [
+        { value: 'low', name: 'Low' },
+        { value: 'high', name: 'High' },
+      ],
+    }
+    const WITH_LEVELS: CliModelList = { ...LIST, efforts: { small: THINKING } }
+    const LEVELS = {
+      efforts: [
+        { id: 'low', name: 'Low' },
+        { id: 'high', name: 'High' },
+      ],
+      defaultEffort: 'high',
+    }
+
+    it('offers each model the levels the CLI reported', async () => {
+      const { catalog } = setup(() => Promise.resolve(WITH_LEVELS))
+      catalog.ensureListed('cli-x')
+      await settled()
+      expect(['default', 'small', 'large'].map((model) => catalog.reasoning('cli-x', model))).toEqual([
+        LEVELS,
+        LEVELS,
+        LEVELS,
+      ])
+    })
+
+    it('offers no levels before the CLI has answered', () => {
+      expect(setup().catalog.reasoning('cli-x', 'default')).toBeUndefined()
+    })
+
+    it('learns what a session reports, saving it and refreshing the menu', async () => {
+      const { catalog, deps } = setup(() => Promise.resolve(WITH_LEVELS))
+      catalog.ensureListed('cli-x')
+      await settled()
+      deps.onUpdated.mockClear()
+      catalog.learnEfforts('cli-x', 'large', undefined)
+      expect(catalog.reasoning('cli-x', 'large')).toBeUndefined()
+      expect(deps.onUpdated).toHaveBeenCalledWith('cli-x')
+      expect(deps.save).toHaveBeenLastCalledWith(
+        new Map([['cli-x', { ...WITH_LEVELS, efforts: { small: THINKING, large: null } }]]),
+      )
+    })
+
+    it('stays quiet when a session reports nothing new', async () => {
+      const { catalog, deps } = setup(() => Promise.resolve(WITH_LEVELS))
+      catalog.ensureListed('cli-x')
+      await settled()
+      deps.onUpdated.mockClear()
+      deps.save.mockClear()
+      catalog.learnEfforts('cli-x', 'small', THINKING)
+      expect(deps.onUpdated).not.toHaveBeenCalled()
+      expect(deps.save).not.toHaveBeenCalled()
+    })
+
+    it('ignores reports for a CLI it has no list for yet', () => {
+      const { catalog, deps } = setup()
+      catalog.learnEfforts('cli-x', 'small', THINKING)
+      expect(catalog.known('cli-x')).toBeUndefined()
+      expect(deps.onUpdated).not.toHaveBeenCalled()
+    })
+
+    // A fresh probe only sees the default model; what sessions learned about the rest still holds.
+    it('keeps what was learned about other models across a new answer', async () => {
+      const { catalog } = setup(() => Promise.resolve(WITH_LEVELS))
+      catalog.restore(new Map([['cli-x', { ...WITH_LEVELS, efforts: { small: THINKING, large: null } }]]))
+      catalog.ensureListed('cli-x')
+      await settled()
+      expect(catalog.known('cli-x')?.efforts).toEqual({ small: THINKING, large: null })
+    })
+
+    // A CLI update can take levels away; a saved record must not keep offering them.
+    it('forgets the default model levels when a new answer has none', async () => {
+      const { catalog } = setup(() => Promise.resolve(LIST))
+      catalog.restore(new Map([['cli-x', { ...WITH_LEVELS, efforts: { small: THINKING, large: THINKING } }]]))
+      catalog.ensureListed('cli-x')
+      await settled()
+      expect(catalog.known('cli-x')?.efforts).toEqual({ small: null, large: THINKING })
     })
   })
 })

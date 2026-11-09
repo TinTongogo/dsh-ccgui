@@ -15,6 +15,7 @@ export const SEARCH_INPUT_CLASS = 'dsh-cli-model-search-input'
 export const ROWS_CLASS = 'dsh-cli-model-rows'
 export const ROW_CLASS = 'dsh-cli-model-row'
 export const ROW_ACTIVE_CLASS = 'dsh-cli-model-row-active'
+export const ROW_MARK_CLASS = 'dsh-cli-model-row-mark'
 export const ROW_NAME_CLASS = 'dsh-cli-model-row-name'
 export const ROW_CHECK_CLASS = 'dsh-cli-model-row-check'
 export const HINT_CLASS = 'dsh-cli-model-hint'
@@ -124,6 +125,7 @@ export const MODEL_MENU_STYLES = `
 }
 .${ROW_ACTIVE_CLASS}:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
 .${ROW_CLASS}:disabled { color: var(--dsw-alias-label-dimmed); cursor: default; pointer-events: none; }
+.${ROW_MARK_CLASS} { display: grid; place-items: center; flex: 0 0 14px; }
 .${ROW_NAME_CLASS} {
   flex: 1;
   min-width: 0;

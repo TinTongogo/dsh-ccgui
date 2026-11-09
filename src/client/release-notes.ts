@@ -30,6 +30,54 @@ export interface ReleaseNote {
 /** In display order: the first page is the newest release. */
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: '1.0.4',
+    date: '2026-11-09',
+    sections: [
+      {
+        heading: '✨ 新功能',
+        items: [
+          {
+            title: '每个模型独立的思考强度',
+            text: '读取 CLI 报出的 `thought_level`，按模型记住可用等级，选中后随下一条消息发送。没见过的模型先用默认模型的等级，实际用到后再以 CLI 报的为准，并写入模型缓存。',
+          },
+          {
+            title: '模型菜单显示厂商图标',
+            text: '从模型 id 和名字识别 DeepSeek、Kimi、Claude、OpenAI，认不出时用 CLI 自己的图标，都没有就留空位让名字保持对齐。',
+          },
+          {
+            title: '多厂商模型按厂商分组',
+            text: 'OMP、PI、OpenCode 的模型 id 带 `vendor/` 前缀，出现两个及以上厂商时每个厂商一个分组；无前缀的行（含默认项）留在最上方，选中后仍发送完整 id。',
+          },
+          {
+            title: 'PTC 模式可以用 CLI 了',
+            text: 'CLI 的工具调用包成 `run_code` 程序执行，工具卡片显示为 `run_code`。单次调用（含等待审批）受 PTC 运行时超时上限约束，长任务建议切回标准模式；运行时不兼容时会在启动 CLI 前提示。',
+          },
+        ],
+      },
+      {
+        heading: '🔧 改进',
+        items: [
+          {
+            title: '模型菜单更干净',
+            text: '不再列出与默认项同名的行，也不再列出同一家族里已被新版本取代的旧版本；已经用着这些模型的会话不受影响。',
+          },
+          {
+            title: '思考强度不支持时给出提示',
+            text: '切换模型后如果新模型不支持之前选的等级，沿用 CLI 当前的等级，并提示在菜单里重新选择，而不是让这条消息失败。',
+          },
+        ],
+      },
+      {
+        heading: '📄 文档',
+        items: [{ text: 'README 的标题、关键词和截图加入 Kimi CLI，PTC 模式说明改为已支持及其限制。' }],
+      },
+      {
+        heading: '🔧 维护',
+        items: [{ text: '版本号升到 1.0.4；新增思考强度、旧版本识别、PTC 包装和模型图标模块，各自带直接测试。' }],
+      },
+    ],
+  },
+  {
     version: '1.0.3',
     date: '2026-11-09',
     sections: [

@@ -20,6 +20,10 @@ const MENU_LABEL = '模型'
 const PROVIDER_DEFAULT_LABEL = 'Default'
 const PROVIDER_DEFAULT_KEY = 'provider-default'
 const LOADING_STATUS = 'loading'
+/** Splits a CLI model id such as `deepseek/deepseek-flash` into its vendor and the rest. */
+const VENDOR_SEPARATOR = '/'
+/** Fewer vendors than this leave a CLI's list whole, as one heading would only repeat the CLI. */
+const MIN_VENDOR_SECTIONS = 2
 
 /** One model row, which only the provider and the model id together identify. */
 export interface MenuRow {
@@ -29,10 +33,12 @@ export interface MenuRow {
   readonly reasoning?: DirectoryReasoning
 }
 
-/** One provider's rows. */
+/** One provider's rows, or one vendor's within a CLI. */
 export interface MenuSection {
   readonly id: string
   readonly name: string
+  /** Whether the section shows its name above its rows. */
+  readonly headed: boolean
   readonly rows: readonly MenuRow[]
 }
 
@@ -48,8 +54,6 @@ export interface MenuModels {
   /** Names the open card for assistive technology. */
   readonly label: string
   readonly sections: readonly MenuSection[]
-  /** Whether each section gets a heading; a CLI's single list needs none. */
-  readonly headed: boolean
   readonly current: MenuRow | undefined
   /** The catalog has not arrived yet, so a missing current model is not yet a missing one. */
   readonly loading: boolean
@@ -82,10 +86,11 @@ export function rowCount(sections: readonly MenuSection[]): number {
   return sections.reduce((count, section) => count + section.rows.length, 0)
 }
 
-function toSection({ id, name, models }: DirectoryGroup): MenuSection {
+function toSection({ id, name, models }: DirectoryGroup, headed: boolean): MenuSection {
   return {
     id,
     name: id === ACCOUNT_PROVIDER_ID ? ACCOUNT_PROVIDER_NAME : name,
+    headed,
     rows: models.map(({ id: model, name: modelName, reasoning }) => ({
       provider: id,
       model,
@@ -105,19 +110,46 @@ function effortLevels(reasoning: DirectoryReasoning | undefined): readonly Effor
   return [{ key: PROVIDER_DEFAULT_KEY, effort: undefined, name: PROVIDER_DEFAULT_LABEL }, ...levels]
 }
 
-type Listing = Pick<MenuModels, 'label' | 'sections' | 'headed' | 'unlisted'>
+function vendorOf(row: MenuRow): string | undefined {
+  const at = row.model.indexOf(VENDOR_SEPARATOR)
+  return at > 0 ? row.model.slice(0, at) : undefined
+}
+
+/**
+ * ACP has no field saying which vendor a CLI model comes from, and OMP, PI and OpenCode list
+ * several vendors in one flat list. Their ids carry it as a `vendor/` prefix, so a list with
+ * more than one prefix is shown under one heading per vendor, the way those CLIs show it.
+ * Rows without a prefix, the default entry among them, stay on top without a heading.
+ */
+function vendorSections(section: MenuSection): readonly MenuSection[] {
+  const vendors = [...new Set(section.rows.flatMap((row) => vendorOf(row) ?? []))]
+  if (vendors.length < MIN_VENDOR_SECTIONS) return [section]
+  const loose = section.rows.filter((row) => vendorOf(row) === undefined)
+  const lead = loose.length === 0 ? [] : [{ ...section, rows: loose }]
+  return [
+    ...lead,
+    ...vendors.map((vendor) => ({
+      id: `${section.id}${VENDOR_SEPARATOR}${vendor}`,
+      name: vendor,
+      headed: true,
+      rows: section.rows.filter((row) => vendorOf(row) === vendor),
+    })),
+  ]
+}
+
+type Listing = Pick<MenuModels, 'label' | 'sections' | 'unlisted'>
 
 function listing(state: DirectoryState): Listing {
   const cli = cliModels(state)
   if (cli !== undefined) {
-    const section = toSection({ id: cli.provider, name: cli.name, models: cli.rows })
-    return { label: cli.name, sections: [section], headed: false, unlisted: cli.listed ? undefined : cli.name }
+    const section = toSection({ id: cli.provider, name: cli.name, models: cli.rows }, false)
+    return { label: cli.name, sections: vendorSections(section), unlisted: cli.listed ? undefined : cli.name }
   }
   const sections = state.groups
     .filter((group) => !group.id.startsWith(CLI_ROUTE_PREFIX))
-    .map(toSection)
+    .map((group) => toSection(group, true))
     .sort((left, right) => providerRank(left.id) - providerRank(right.id))
-  return { label: MENU_LABEL, sections, headed: true, unlisted: undefined }
+  return { label: MENU_LABEL, sections, unlisted: undefined }
 }
 
 /**

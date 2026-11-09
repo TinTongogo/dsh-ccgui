@@ -37,6 +37,7 @@ function setup(overrides: Partial<RegistryDeps> = {}) {
   const deps: RegistryDeps = {
     getAgent: (id) => (id === agent.id ? agent : undefined),
     composedPreset: () => undefined,
+    ptcWrap: () => ({ timeoutMs: 600_000 }),
     onCliSelected: vi.fn(),
     ask: vi.fn(() => Promise.resolve('allowed-once' as const)),
     warn: vi.fn(),
@@ -215,14 +216,11 @@ describe('resolveSession', () => {
     )
   })
 
-  // PTC mode only accepts run_code, so every call the CLI reports would be refused
-  // while the CLI carried on doing the work unseen.
-  it('refuses to run in PTC mode', () => {
+  // The harness runs PTC sessions' mirror calls inside run_code, so the CLI can start there too.
+  it('runs in PTC mode', () => {
     const { registry, deps } = setup({ composedPreset: () => 'ptc' })
-    expect(() => registry.resolveSession('cli-x', 'dsh-1')).toThrow(
-      expect.objectContaining({ code: 'CLI_WRONG_PRESET' }),
-    )
-    expect(deps.createSession).not.toHaveBeenCalled()
+    registry.resolveSession('cli-x', 'dsh-1')
+    expect(deps.createSession).toHaveBeenCalledTimes(1)
   })
 
   it('runs in any other mode', () => {
@@ -424,5 +422,26 @@ describe('disposal', () => {
     registry.resolveSession('cli-x', 'dsh-1')
     registry.disposeSession('dsh-1')
     await vi.waitFor(() => expect(deps.warn).toHaveBeenCalledWith(expect.stringContaining('stuck')))
+  })
+})
+
+describe('ptcWrapFor', () => {
+  it('wraps nothing outside PTC mode', () => {
+    const { registry } = setup({ composedPreset: () => 'standard' })
+    expect(registry.ptcWrapFor('cli-x', 'dsh-1')).toBeUndefined()
+    expect(registry.ptcWrapFor('cli-x', 'nope')).toBeUndefined()
+  })
+
+  it('wraps by the PTC runtime in PTC mode', () => {
+    const { registry } = setup({ composedPreset: () => 'ptc' })
+    expect(registry.ptcWrapFor('cli-x', 'dsh-1')).toEqual({ timeoutMs: 600_000 })
+  })
+
+  // Unwrapped, every mirrored call would be refused while the CLI carried on unseen.
+  it('refuses a PTC runtime that cannot run the wrapping program', () => {
+    const { registry } = setup({ composedPreset: () => 'ptc', ptcWrap: () => undefined })
+    const refuse = () => registry.ptcWrapFor('cli-x', 'dsh-1')
+    expect(refuse).toThrow(expect.objectContaining({ code: 'CLI_WRONG_PRESET' }))
+    expect(refuse).toThrow('X CLI 不支持当前的 PTC 运行时')
   })
 })

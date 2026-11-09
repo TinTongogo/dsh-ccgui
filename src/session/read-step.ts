@@ -10,6 +10,7 @@ import type { BlockState } from '../stream-blocks.ts'
 import type { ToolRecord } from '../tool-record.ts'
 import { toolCallStep, turnEndStep, turnFailure } from './outcomes.ts'
 import type { ReplayFields, StepResult } from './outcomes.ts'
+import type { PtcWrap } from './ptc-call.ts'
 import { addUsage, toTokenUsage, withUsage } from './turn-usage.ts'
 import type { TurnEnd } from './turn-queue.ts'
 import type { SessionEvent } from './types.ts'
@@ -28,6 +29,8 @@ export interface StepSource {
   /** @returns the call to hand to the harness, marked as handed off; undefined if it is gone. */
   readonly handOff: (acpId: string) => ToolRecord | undefined
   readonly replay: () => ReplayFields
+  /** Set when this step runs in a PTC session. */
+  readonly ptc?: PtcWrap
 }
 
 /**
@@ -69,7 +72,7 @@ function applyEvent(
       const record = source.handOff(event.acpId)
       return record === undefined
         ? { state: blocks, chunks: [], done: false }
-        : toolCallStep(blocks, record, source.replay())
+        : toolCallStep(blocks, record, source.replay(), source.ptc)
     }
     case 'turn-end':
       return applyTurnEnd(source, blocks, event, usage)

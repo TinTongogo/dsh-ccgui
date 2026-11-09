@@ -30,6 +30,7 @@ import { probeModels } from './model-probe.ts'
 import { npxCacheDir, startFromNpxCache } from './npx-cache.ts'
 import { gitHandler, registerGitRoutes } from './git/git-routes.ts'
 import type { GitConnection, GitWebServer } from './git/git-routes.ts'
+import { readPtcWrap } from './session/ptc-call.ts'
 import { CliSessionRegistry } from './session-registry.ts'
 import type { CliAgentConfig, SessionStart } from './session-registry.ts'
 import { openStdioTransport } from './stdio-transport.ts'
@@ -123,6 +124,8 @@ export default class CliBridge extends Service {
     this.registry = new CliSessionRegistry(config.agents, {
       getAgent: (sessionId) => ctx.agents.get(sessionId as SessionId),
       composedPreset: (agent) => ctx.get('agentPresets')?.composedPreset(agent.ctx),
+      // Read per step: the runtime is another plugin's service and may be reloaded.
+      ptcWrap: () => readPtcWrap(ctx.get('ptcRuntime')),
       ask: (agent, request, signal) => this.ask(agent, request, signal),
       warn: (message) => ctx.logger.warn(message),
       onCliSelected: (provider) => this.catalog.ensureListed(provider),
@@ -186,9 +189,11 @@ export default class CliBridge extends Service {
         new CliBridgeAdapter({
           labelFor: (provider) => registry.labelFor(provider),
           resolveSession: (provider, sessionId) => registry.resolveSession(provider, sessionId),
+          ptcWrapFor: (provider, sessionId) => registry.ptcWrapFor(provider, sessionId),
           currentTurnMessageIds: (sessionId) => registry.currentTurnMessageIds(sessionId),
           modelsFor: (provider) => catalog.listModels(provider),
           modelName: (provider, model) => catalog.modelName(provider, model),
+          reasoningFor: (provider, model) => catalog.reasoning(provider, model),
         }),
       )
     }
@@ -312,6 +317,7 @@ export default class CliBridge extends Service {
       cancelGraceMs: this.config.cancelGraceMs,
       startTimeoutMs: this.config.startTimeoutMs,
       knownModels: () => this.catalog.known(provider),
+      onEfforts: (model, effort) => this.catalog.learnEfforts(provider, model, effort),
       readImage: (ref, signal) => this.readImage(ref, signal),
       onError: (error) => this.ctx.logger.warn(`ccgui: ${agent.name}: ${String(error)}`),
       openTransport: (handlers) => this.openTransport(agent, cwd, handlers),
