@@ -41,6 +41,7 @@ function setup(overrides: Partial<RegistryDeps> = {}) {
     onCliSelected: vi.fn(),
     ask: vi.fn(() => Promise.resolve('allowed-once' as const)),
     warn: vi.fn(),
+    hasReviewRoute: () => false,
     createSession: vi.fn(() => {
       const session = fakeSession()
       sessions.push(session)
@@ -223,6 +224,49 @@ describe('resolveSession', () => {
     expect(deps.createSession).toHaveBeenCalledTimes(1)
   })
 
+  // Auto's reviewer needs a stateless model. With no such route, refuse at the
+  // start of the turn rather than failing every tool call.
+  it('refuses Auto before starting a CLI when no review route exists', () => {
+    const { registry, deps } = setup()
+    registry.observeEvent('dsh-1', { type: 'permission/preset', data: { preset: 'auto' } })
+    const run = () => registry.resolveSession('cli-x', 'dsh-1')
+    expect(run).toThrow(expect.objectContaining({ code: 'CLI_WRONG_PRESET' }))
+    expect(run).toThrow(/审查模型/)
+    expect(deps.createSession).not.toHaveBeenCalled()
+  })
+
+  it('runs Auto when an independent review route exists', () => {
+    const { registry, deps } = setup({ hasReviewRoute: () => true })
+    registry.observeEvent('dsh-1', { type: 'permission/preset', data: { preset: 'auto' } })
+    registry.resolveSession('cli-x', 'dsh-1')
+    expect(deps.createSession).toHaveBeenCalledTimes(1)
+  })
+
+  it('still refuses Auto when a session is already live', () => {
+    const { registry, deps } = setup()
+    registry.resolveSession('cli-x', 'dsh-1')
+    registry.observeEvent('dsh-1', { type: 'permission/preset', data: { preset: 'auto' } })
+    expect(() => registry.resolveSession('cli-x', 'dsh-1')).toThrow(
+      expect.objectContaining({ code: 'CLI_WRONG_PRESET' }),
+    )
+    expect(deps.createSession).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads the permission preset from the session log, not the agent preset', () => {
+    const { registry } = setup({ hasReviewRoute: () => true, composedPreset: () => 'auto' })
+    registry.observeEvent('dsh-1', { type: 'permission/preset', data: { preset: 'auto' } })
+    expect(registry.permissionPresetFor('dsh-1')).toBe('auto')
+    registry.disposeSession('dsh-1')
+    expect(registry.permissionPresetFor('dsh-1')).toBeUndefined()
+  })
+
+  it('runs full access without needing a review route', () => {
+    const { registry, deps } = setup()
+    registry.observeEvent('dsh-1', { type: 'permission/preset', data: { preset: 'danger-full-access' } })
+    registry.resolveSession('cli-x', 'dsh-1')
+    expect(deps.createSession).toHaveBeenCalledTimes(1)
+  })
+
   it('runs in any other mode', () => {
     const { registry, deps } = setup({ composedPreset: () => 'standard' })
     registry.resolveSession('cli-x', 'dsh-1')
@@ -251,6 +295,31 @@ describe('waitForTool', () => {
     const askSignal = new AbortController().signal
     await expect(ask({ reason: 'rm x', callId: 'cli-1' }, askSignal)).resolves.toBe('allowed-once')
     expect(deps.ask).toHaveBeenCalledWith(agent, { reason: 'rm x', callId: 'cli-1' }, askSignal)
+  })
+
+  // Full access already grants everything; Auto has already had a reviewer decide.
+  // The harness's `never` policy would reject a second ask outright, and `ask`
+  // would put a dialog in front of the user on every mirrored call.
+  it.each(['auto', 'danger-full-access'])('grants mirrored calls under %s without asking', async (preset) => {
+    const { agent, deps, registry, sessions } = setup({ hasReviewRoute: () => true })
+    registry.observeEvent('dsh-1', { type: 'permission/preset', data: { preset } })
+    registry.resolveSession('cli-x', 'dsh-1')
+    await expect(registry.waitForTool(execFor(agent))).resolves.toMatchObject({ text: 'ok' })
+    const session = sessions[0] as CliSession
+    const [, ask] = vi.mocked(session.waitForTool).mock.calls[0] as Parameters<CliSession['waitForTool']>
+    await expect(ask({ reason: 'write' }, new AbortController().signal)).resolves.toBe('allowed-once')
+    expect(deps.ask).not.toHaveBeenCalled()
+  })
+
+  it('still asks under other permission presets', async () => {
+    const { agent, deps, registry, sessions } = setup()
+    registry.observeEvent('dsh-1', { type: 'permission/preset', data: { preset: 'workspace-write' } })
+    registry.resolveSession('cli-x', 'dsh-1')
+    await expect(registry.waitForTool(execFor(agent))).resolves.toMatchObject({ text: 'ok' })
+    const session = sessions[0] as CliSession
+    const [, ask] = vi.mocked(session.waitForTool).mock.calls[0] as Parameters<CliSession['waitForTool']>
+    await ask({ reason: 'write' }, new AbortController().signal)
+    expect(deps.ask).toHaveBeenCalledTimes(1)
   })
 
   it('rejects a call outside a CLI session', async () => {

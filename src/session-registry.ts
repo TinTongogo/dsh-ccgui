@@ -46,6 +46,8 @@ export interface RegistryDeps {
   warn(message: string): void
   /** Someone chose this CLI, so starting it is now acceptable. */
   onCliSelected(provider: string): void
+  /** Whether an independent stateless model route can serve auto-review requests. */
+  hasReviewRoute(): boolean
   createSession(config: CliAgentConfig, sessionId: string, cwd: string, start: SessionStart): CliSession
 }
 
@@ -63,6 +65,14 @@ interface LiveSession {
 const NO_MESSAGES: ReadonlySet<string> = new Set()
 /** This preset's tool executor only accepts `run_code`, so mirrored calls go out wrapped in it. */
 const PTC_PRESET = 'ptc'
+/** The permission preset service records every switch under this session event. */
+const PERMISSION_PRESET_EVENT = 'permission/preset'
+/** Auto delegates each call to a reviewer model instead of a person. */
+const AUTO_PRESET = 'auto'
+/** Full access grants every operation, so asking again would only repeat that decision. */
+const FULL_ACCESS_PRESET = 'danger-full-access'
+/** Presets under which mirrored CLI calls must not stop for an interactive decision. */
+const NO_ASK_PRESETS: ReadonlySet<string> = new Set([AUTO_PRESET, FULL_ACCESS_PRESET])
 
 function without<K, V>(map: ReadonlyMap<K, V>, key: K): ReadonlyMap<K, V> {
   return new Map([...map].filter(([candidate]) => candidate !== key))
@@ -74,6 +84,7 @@ export class CliSessionRegistry {
   private sessions: ReadonlyMap<string, LiveSession> = new Map()
   private stopping: ReadonlyMap<string, Promise<void>> = new Map()
   private turnMessages: ReadonlyMap<string, ReadonlySet<string>> = new Map()
+  private permissionPresets: ReadonlyMap<string, string> = new Map()
 
   constructor(
     agents: readonly CliAgentConfig[],
@@ -151,8 +162,22 @@ export class CliSessionRegistry {
       case 'model/selection':
         this.noticeSelection((event.data as { provider?: unknown } | undefined)?.provider)
         return
+      case PERMISSION_PRESET_EVENT:
+        this.recordPermissionPreset(sessionId, (event.data as { preset?: unknown } | undefined)?.preset)
+        return
       default:
     }
+  }
+
+  /**
+   * Read the permission preset a session last selected. It is a session-log fact,
+   * unlike `composedPreset`, which names the agent preset and never changes when
+   * the user switches `/permission`.
+   * @param sessionId - the harness session.
+   * @returns the preset name, or undefined before the first selection was logged.
+   */
+  permissionPresetFor(sessionId: string): string | undefined {
+    return this.permissionPresets.get(sessionId)
   }
 
   /**
@@ -164,6 +189,7 @@ export class CliSessionRegistry {
     return this.turnMessages.get(sessionId) ?? NO_MESSAGES
   }
 
+  /**
   /**
    * Decide whether a step's tool calls go out wrapped in `run_code`.
    * @param provider - the requested CLI route.
@@ -182,7 +208,8 @@ export class CliSessionRegistry {
   }
 
   /**
-   * Find or create the CLI session for a harness session.
+   * Find or create the CLI session for a harness session. Auto needs a reviewer route,
+   * so a session with no stateless model to review on is refused before a CLI starts.
    * @param provider - the requested CLI route.
    * @param sessionId - the harness session.
    * @returns a CLI session; a dead one is returned until its failure has been read.
@@ -192,6 +219,14 @@ export class CliSessionRegistry {
     if (config === undefined) throw new LlmError(`未知的 CLI 路由：${provider}`, 'CLI_START_FAILED')
     const agent = this.deps.getAgent(sessionId)
     if (agent === undefined) throw new LlmError(`找不到会话 ${sessionId}。`, 'CLI_START_FAILED')
+    // Auto needs a separate stateless reviewer model. Without one, refusing here
+    // keeps the failure at the start of the turn instead of on every tool call.
+    if (this.permissionPresetFor(sessionId) === AUTO_PRESET && !this.deps.hasReviewRoute()) {
+      throw new LlmError(
+        `${config.name} 的「EXP 自动审查」需要独立的审查模型，但当前没有可用的非 CLI 模型路由；请在插件配置里设置 reviewProvider / reviewModel，或改用其它权限预设。`,
+        'CLI_WRONG_PRESET',
+      )
+    }
     const current = this.sessions.get(sessionId)
     if (current?.provider === provider && !current.session.replaceable) return current.session
     this.stopSession(sessionId)
@@ -216,7 +251,14 @@ export class CliSessionRegistry {
     if (agent === undefined || session === undefined) {
       throw new Error(`${CLI_TOOL_NAME} 只记录 CLI 发出的调用，不能直接使用。`)
     }
-    return session.waitForTool(callId, (request, askSignal) => this.deps.ask(agent, request, askSignal), signal)
+    // Under full access every operation is already granted; under Auto the reviewer
+    // has already decided. Asking the harness again would only repeat that decision
+    // on every mirrored call (and its `never` policy would reject it outright).
+    const noAsk = NO_ASK_PRESETS.has(this.permissionPresetFor(agent.id) ?? '')
+    const ask = noAsk
+      ? () => Promise.resolve('allowed-once' as const)
+      : (request: PermissionAsk, askSignal: AbortSignal) => this.deps.ask(agent, request, askSignal)
+    return session.waitForTool(callId, ask, signal)
   }
 
   /**
@@ -225,6 +267,7 @@ export class CliSessionRegistry {
    */
   disposeSession(sessionId: string): void {
     this.turnMessages = without(this.turnMessages, sessionId)
+    this.permissionPresets = without(this.permissionPresets, sessionId)
     this.stopSession(sessionId)
   }
 
@@ -241,6 +284,11 @@ export class CliSessionRegistry {
 
   private noticeSelection(provider: unknown): void {
     if (typeof provider === 'string' && this.agentsByProvider.has(provider)) this.deps.onCliSelected(provider)
+  }
+
+  private recordPermissionPreset(sessionId: string, preset: unknown): void {
+    if (typeof preset !== 'string') return
+    this.permissionPresets = new Map([...this.permissionPresets, [sessionId, preset]])
   }
 
   private recordTurnMessage(sessionId: string, id: unknown): void {

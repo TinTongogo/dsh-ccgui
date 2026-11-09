@@ -131,7 +131,12 @@ export async function openHarness() {
   async function chooseModel(cli, name, timeout = 180_000) {
     await until(async () => (await modelNames(cli)).includes(name), `model ${name}`, timeout)
     await openModelList()
-    await page.getByRole('group', { name: cli, exact: true }).getByRole('menuitemradio', { name, exact: true }).click()
+    // A row's accessible name also contains the small print beside its name (a CLI's
+    // cost multiplier), so match on the title: the same name modelNames() reports.
+    await page
+      .getByRole('group', { name: cli, exact: true })
+      .locator(`[role="menuitemradio"][title=${JSON.stringify(name)}]`)
+      .click()
     await sleep(500)
   }
 

@@ -30,6 +30,8 @@ export interface MenuRow {
   readonly provider: string
   readonly model: string
   readonly name: string
+  /** Small print shown beside the name, e.g. a CLI's usage cost multiplier. */
+  readonly description?: string
   readonly reasoning?: DirectoryReasoning
 }
 
@@ -91,10 +93,11 @@ function toSection({ id, name, models }: DirectoryGroup, headed: boolean): MenuS
     id,
     name: id === ACCOUNT_PROVIDER_ID ? ACCOUNT_PROVIDER_NAME : name,
     headed,
-    rows: models.map(({ id: model, name: modelName, reasoning }) => ({
+    rows: models.map(({ id: model, name: modelName, description, reasoning }) => ({
       provider: id,
       model,
       name: modelName,
+      ...(description === undefined ? {} : { description }),
       ...(reasoning === undefined ? {} : { reasoning }),
     })),
   }

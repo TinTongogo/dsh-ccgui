@@ -10,8 +10,8 @@ import { mergeToolUpdate, toCliToolArgs } from '../../src/tool-record.ts'
 const LABEL = 'X CLI'
 const REPLAY = { replayState: nativeReplayState('acp-1', 'dsh-1') }
 
-function finishOf(stopReason: StopReason): unknown {
-  const { chunks } = turnEndStep(EMPTY_BLOCKS, stopReason, LABEL, REPLAY)
+function finishOf(stopReason: StopReason, text = ''): unknown {
+  const { chunks } = turnEndStep(EMPTY_BLOCKS, { stopReason, text }, LABEL, REPLAY)
   return chunks.at(-1)
 }
 
@@ -28,7 +28,16 @@ describe('turnEndStep', () => {
     ['end_turn', { kind: 'stop' }],
     ['max_tokens', { kind: 'max-tokens' }],
     ['cancelled', { kind: 'aborted', failure: { message: 'X CLI 已取消本轮。', code: 'ABORTED' } }],
-    ['refusal', { kind: 'error', failure: { message: 'X CLI 拒绝继续这个请求。', code: 'CLI_REFUSAL' } }],
+    [
+      'refusal',
+      {
+        kind: 'error',
+        failure: {
+          message: 'X CLI 拒绝继续这个请求，但未说明原因（可查看 CLI 日志了解详情）。',
+          code: 'CLI_REFUSAL',
+        },
+      },
+    ],
     [
       'max_turn_requests',
       { kind: 'error', failure: { message: 'X CLI 达到了单轮请求次数上限。', code: 'CLI_TURN_LIMIT' } },
@@ -47,10 +56,47 @@ describe('turnEndStep', () => {
 
   it('closes an open block before finishing, and ends the step', () => {
     const open = appendDelta(EMPTY_BLOCKS, 'text', 'hi').state
-    const step = turnEndStep(open, 'end_turn', LABEL, {})
+    const step = turnEndStep(open, { stopReason: 'end_turn', text: '' }, LABEL, {})
     expect(step.done).toBe(true)
     expect(step.chunks.at(-1)).toEqual({ type: 'finish', reason: { kind: 'stop' } })
     expect(step.chunks.length).toBeGreaterThan(1)
+  })
+})
+
+describe('refusal details', () => {
+  // ACP has no error field on PromptResponse: the reason only arrives as streamed
+  // text. Without carrying it into the failure the user sees an empty refusal.
+  it('explains a refusal with what the CLI said', () => {
+    expect(finishOf('refusal', 'Hy4 限时免费模型的额度已用尽，请切换模型。')).toMatchObject({
+      reason: {
+        kind: 'error',
+        failure: {
+          code: 'CLI_REFUSAL',
+          message: 'X CLI 拒绝继续这个请求：Hy4 限时免费模型的额度已用尽，请切换模型。',
+        },
+      },
+    })
+  })
+
+  it('collapses whitespace in the reason', () => {
+    expect(finishOf('refusal', '  模型\n不可用  ')).toMatchObject({
+      reason: { failure: { message: 'X CLI 拒绝继续这个请求：模型 不可用' } },
+    })
+  })
+
+  it('keeps the tail of a long answer, where the reason usually is', () => {
+    const message = (
+      finishOf('refusal', 'a'.repeat(500) + 'QUOTA_EXCEEDED') as {
+        reason: { failure: { message: string } }
+      }
+    ).reason.failure.message
+    expect(message).toContain('QUOTA_EXCEEDED')
+    expect(message.startsWith('X CLI 拒绝继续这个请求：…')).toBe(true)
+    expect(message.length).toBeLessThan(450)
+  })
+
+  it('leaves a normal finish untouched even when the CLI produced text', () => {
+    expect(finishOf('end_turn', 'a complete answer')).toMatchObject({ reason: { kind: 'stop' } })
   })
 })
 

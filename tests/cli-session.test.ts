@@ -98,6 +98,35 @@ describe('CliSession text turns', () => {
     const chunks = await collect(session.stream({ messages: [user('1', 'hi')] }))
     expect(finishOf(chunks)?.reason.kind).toBe(kind)
   })
+
+  // ACP's PromptResponse has no error field: the refusal reason arrives as a
+  // streamed text chunk. It must reach the finish failure, or the UI shows a
+  // bare "refused" with no way to tell that a free-model quota was exhausted.
+  it('puts the CLI refusal reason into the finish failure', async () => {
+    const { session } = setup((t) => {
+      t.update(text('Hy4 限时免费模型的额度已用尽，请切换模型。'))
+      return 'refusal' as const
+    })
+    const chunks = await collect(session.stream({ messages: [user('1', 'hi')] }))
+    expect(finishOf(chunks)?.reason).toMatchObject({
+      kind: 'error',
+      failure: {
+        code: 'CLI_REFUSAL',
+        message: 'OpenCode 拒绝继续这个请求：Hy4 限时免费模型的额度已用尽，请切换模型。',
+      },
+    })
+  })
+
+  it('falls back to a reasoning chunk when the CLI explained itself only there', async () => {
+    const { session } = setup((t) => {
+      t.update(thought('model quota exhausted'))
+      return 'refusal' as const
+    })
+    const chunks = await collect(session.stream({ messages: [user('1', 'hi')] }))
+    expect(finishOf(chunks)?.reason).toMatchObject({
+      failure: { message: 'OpenCode 拒绝继续这个请求：model quota exhausted' },
+    })
+  })
 })
 
 describe('CliSession tool calls', () => {

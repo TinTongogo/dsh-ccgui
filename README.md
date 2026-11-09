@@ -82,6 +82,7 @@ CLI 和模型各有一个菜单。模型菜单列出当前 CLI 真实可用的�
 - 选中 CLI 后插件才启动它询问模型，刚选中时菜单里只有它的名字，通常 1 秒左右换成真实列表；`npx` 启动的 CLI 第一次还要等下载。
 - 费用和账号都走 CLI 自己的配置。比如 Codex 配了中转服务时，菜单里的模型不一定都能用，错误会原样显示。
 - 标准模式和 PTC 模式都能用。PTC 模式只接受 `run_code`，所以 CLI 的每次工具调用会包成一个 `run_code` 程序，工具卡片显示为 `run_code`，不是终端或 diff 卡片。单次工具调用（包括等你审批的时间）受 PTC 运行时的超时上限约束，超时会取消 CLI 这一轮，跑很久的构建或测试建议切回标准模式。PTC 运行时不是 TypeScript 函数体格式时无法包装，会提示切回标准模式。
+- 模型名保持 CLI 给的原样，右侧小字显示 CLI 报告的描述。CodeBuddy 的消耗倍率（如 `x0.29 credits`）就在这里，所以免费档和付费档、以及其它模型的倍率都能在菜单里看到；同名的模型也靠它区分。会话里显示的当前模型名不带倍率。
 
 </details>
 
@@ -223,6 +224,8 @@ OpenCode（项目的 `opencode.json`）：
 ## 已知限制
 
 - 不支持 `/compact`、fork、回滚和运行中插话；运行中发的消息会排队到这一轮结束。
+- 「完全权限」和「自动审查」下，CLI 发出的 ACP 权限请求自动放行，不再每次弹授权；其它权限预设仍照常询问。
+- 「EXP 自动审查」（`/permission auto`）的 reviewer 请求会转给一个非 CLI 的 stateless 模型路由，不会进入 CLI 会话历史。默认自动挑第一个非 CLI 提供方及其首个模型，也可以在插件配置里用 `reviewProvider` / `reviewModel` 指定（见 `cordis.patch.yml` 的 `config`）；宿主没有任何非 CLI 模型时，会在开工前提示改用其它预设。
 - 只转发文本和你自己写的消息、定时任务；图片和 DSH 写给自己模型的提醒不会发给 CLI。
 - CLI 会话不显示 tok/s、token 用量和缓存命中：ACP 每轮只给一个累计用量，换算不成 DSH 按单次请求统计的口径，显示出来会是错的。上下文用量也不准，CLI 自己管理上下文；窗口按 1000M 申报，是为了让 DSH 的压缩永远不启动。
 - DSH 侧的上下文压缩对 CLI 会话不生效，包括 billion-context 这类插件的自动压缩、压缩提醒和 compress / search_context 等工具。CLI 每轮只收到新发的消息，对话历史存在 CLI 自己那边，DSH 压缩的是一份 CLI 不读的副本，压了也不会让 CLI 发给模型的上下文变小。上下文由 CLI 自己压缩（比如 Claude Code 的自动压缩）。如果想让 CLI 的模型请求经过某个代理，可以在 agent 配置的 `env` 里设置 CLI 认的地址变量，比如 Claude Code 的 `ANTHROPIC_BASE_URL`。
@@ -232,6 +235,8 @@ OpenCode（项目的 `opencode.json`）：
 <summary>更多限制</summary>
 
 - `/model` 命令仍会列出所有提供方，包括 CLI。不要用它在同一会话里在 DeepSeek 和 CLI 之间切换：切到 CLI 时它没有之前的上下文，切出时压缩摘要可能失败。同一 CLI 内换模型没问题。
+- 摘要、压缩等带 `purpose` 的辅助模型请求仍被拒绝（自动审查除外），不会被当成用户新输入转发给 CLI：否则会话历史会被当成指令，开启一个真的会执行操作的回合。
+- 自动审查看到的是 CLI 通过 `cli_tool` 镜像上报的调用信息。reviewer 拒绝时，还会拒绝该调用悬着的 ACP 权限请求；若 CLI 是先执行再上报，拒绝无法撤销已经发生的改动。
 - 每次启动 DSH 后第一次用到某个 CLI，会短暂启动它询问模型。临时会话放在 DSH 主目录的 `ccgui/model-probe`；能删的会删掉，OMP 只支持关闭，每次会留下约 4KB 记录。
 - CLI 启动的时间上限是 `startTimeoutMs`，默认 120 秒。Claude Code 的适配器连同依赖约 400MB，实测第一次启动约 100 秒，网速慢时要先调大。
 - CodeBuddy CLI 要先登录或配好 API Key，否则提示 `Authentication required`。
@@ -240,6 +245,7 @@ OpenCode（项目的 `opencode.json`）：
 - Codex 按停止后已启动的命令留在后台，DSH 退出时才清理，ACP 没有提供停止它们的办法。Claude Code 会把预计超过 10 分钟的命令放到后台，同样如此；它也拒绝单独的 `sleep`。
 - 失败那一轮的消息不会自动补发（见[工作原理](#工作原理)），需要重新发送。
 - CLI 的错误原文会显示并进入会话日志，可能带路径等信息。
+- CLI 以 `refusal` 结束本轮时，错误提示会带上它在本轮输出的说明文本（例如免费模型额度用尽），超过 400 字只保留末尾；ACP 的 `session/prompt` 响应本身没有错误字段。若 CLI 只在 stderr 打印原因、没有通过 ACP 发任何文本，插件拿不到原因，此时提示会写明「未说明原因」。
 - 折叠行显示内部名 `cli_tool`，状态文字仍是 DSH 的“深度求索中”。
 
 </details>
@@ -283,10 +289,16 @@ DSH 启动 CLI 时会去掉名字含 `KEY`、`PASSWORD`、`SECRET`、`TOKEN` 的
 ## 开发
 
 ```sh
+pnpm check           # 全量门禁：格式、类型、lint、架构、死代码、类型覆盖率、测试覆盖率
+pnpm build           # 改了 src/ 就跑，生成 lib/
+pnpm size            # 改文件前先看体量；标为 SPLIT SOON 的文件先拆再改
+
 pnpm test            # 单元和集成测试
 pnpm run coverage
 pnpm run typecheck
 ```
+
+完成标准、架构边界和代码约定见 [AGENTS.md](AGENTS.md)：改了行为要在 `tests/` 补测试或调整测试；改了 `src/client/` 的界面或交互，还要跑下面的 `node e2e/fake-cli.mjs`，跑不了要明确说明，不要声称已验证。检查不通过时改代码，不要改规则或降低门槛。
 
 <details>
 <summary>端到端测试</summary>

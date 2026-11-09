@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Message } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { GenerateOptions, LlmAdapter } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, LlmAdapter, StreamChunk } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionEvent, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type { ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import type { ToolDefinition, ToolRegistrationOptions, ToolRunContext } from '@deepseek-ai/dsh-tools'
@@ -54,6 +54,15 @@ interface Registration {
   readonly options: ToolRegistrationOptions | undefined
 }
 
+interface ReviewMock {
+  /** Providers the harness advertises besides the CLIs. */
+  providers: string[]
+  /** Models each of those providers advertises, in order. */
+  models: Record<string, string[]>
+  /** Requests the plugin forwarded to a stateless route. */
+  requests: GenerateOptions[]
+}
+
 interface Harness {
   readonly root: Context
   readonly subprocess: NodeSubprocess
@@ -64,7 +73,10 @@ interface Harness {
   readonly logs: Message[]
   readonly modelUpdates: string[]
   readonly dshHome: string
+  readonly review: ReviewMock
 }
+
+const REVIEW_FINISH: StreamChunk = { type: 'finish', reason: { kind: 'stop' } }
 
 interface FakeAgent {
   readonly agent: Agent
@@ -80,6 +92,7 @@ function harness({ homePath = true }: { homePath?: boolean } = {}): Harness {
   const presets = new Map<Context, string>()
   const logs: Message[] = []
   const modelUpdates: string[] = []
+  const review: ReviewMock = { providers: [], models: {}, requests: [] }
   const dshHome = mkdtempSync(join(tmpdir(), 'ccgui-home-'))
   root.logger.exporter({ export: (message) => logs.push(message) })
   root.on('llm/models-updated', (provider) => modelUpdates.push(provider))
@@ -87,6 +100,15 @@ function harness({ homePath = true }: { homePath?: boolean } = {}): Harness {
     registerAdapter: (providers: string[], adapter: LlmAdapter) => {
       adapters.push({ providers, adapter })
       return () => undefined
+    },
+    listProviders: () => review.providers.map((id) => ({ id, name: id })),
+    listModels: (provider: string) =>
+      Promise.resolve((review.models[provider] ?? []).map((id) => ({ provider, id, name: id }))),
+    stream: (options: GenerateOptions) => {
+      review.requests.push(options)
+      return (async function* (): AsyncGenerator<StreamChunk> {
+        yield REVIEW_FINISH
+      })()
     },
   })
   root.provide('tools', {
@@ -99,7 +121,7 @@ function harness({ homePath = true }: { homePath?: boolean } = {}): Harness {
   root.provide('subprocess', { spawn: subprocess.spawn.bind(subprocess) })
   root.provide('agentPresets', { composedPreset: (ctx: Context) => presets.get(ctx) })
   if (homePath) root.provide('dshHomePath', (...segments: string[]) => join(dshHome, ...segments))
-  return { root, subprocess, adapters, tools, agents, presets, logs, modelUpdates, dshHome }
+  return { root, subprocess, adapters, tools, agents, presets, logs, modelUpdates, dshHome, review }
 }
 
 function addAgent(
@@ -128,6 +150,8 @@ const BASE: Config = {
   disposeEofGraceMs: 500,
   cancelGraceMs: 200,
   startTimeoutMs: 10_000,
+  reviewProvider: '',
+  reviewModel: '',
 }
 
 async function load(h: Harness, config: Partial<Config> = {}) {
@@ -151,14 +175,20 @@ function onlyTool(h: Harness): Registration {
   return entry
 }
 
-const request = (fields: Partial<GenerateOptions>): GenerateOptions =>
-  fake<GenerateOptions>({
-    provider: 'cli-fake',
-    model: DEFAULT_MODEL_ID,
-    messages: [],
-    sessionId: sid('dsh-1'),
-    ...fields,
-  })
+/** This SDK types `purpose` as always undefined; newer hosts do send it. */
+type RequestFields = Omit<Partial<GenerateOptions>, 'purpose'> & { purpose?: string }
+
+const request = (fields: RequestFields): GenerateOptions =>
+  Object.assign(
+    {},
+    fake<GenerateOptions>({
+      provider: 'cli-fake',
+      model: DEFAULT_MODEL_ID,
+      messages: [],
+      sessionId: sid('dsh-1'),
+    }),
+    fields,
+  )
 
 function emitSessionEvent(h: Harness, sessionId: string, event: { type: string; data?: unknown }): void {
   h.root.emit('session/event', fake<Session>({ id: sid(sessionId) }), event as SessionEvent)
@@ -210,6 +240,8 @@ describe('CliBridge.Config', () => {
         disposeEofGraceMs: 6_000,
         cancelGraceMs: 10_000,
         startTimeoutMs: 120_000,
+        reviewProvider: '',
+        reviewModel: '',
       },
     })
   })
@@ -271,7 +303,12 @@ describe('CliBridge.Config', () => {
 describe('CliBridge wiring', () => {
   it('waits for every injected service before starting', async () => {
     const root = new Context()
-    root.provide('llm', { registerAdapter: vi.fn() })
+    root.provide('llm', {
+      registerAdapter: vi.fn(),
+      listProviders: () => [],
+      listModels: () => Promise.resolve([]),
+      stream: vi.fn(),
+    })
     root.provide('agents', { get: () => undefined })
     root.provide('subprocess', { spawn: vi.fn() })
     const fiber = root.plugin(CliBridge, BASE)
@@ -457,6 +494,87 @@ describe('CliBridge routing and model listing', () => {
     expect(warnings(h)).toEqual([])
     expect(h.modelUpdates).toEqual([])
     expect(h.root.get('cliBridge')).toBeUndefined()
+  })
+})
+
+describe('CliBridge auto-review routing', () => {
+  // Reviewer calls arrive stamped with the main agent's CLI route. They must reach
+  // a stateless model with the policy intact, never a `session/prompt` in the CLI.
+  it('forwards the reviewer to the first non-CLI provider with its request intact', async () => {
+    const h = harness()
+    h.review.providers = ['cli-fake', 'deepseek']
+    h.review.models = { deepseek: ['deepseek-chat'] }
+    await start(h)
+    const options = request({
+      purpose: 'auto-review',
+      system: 'REVIEW_POLICY',
+      temperature: 0,
+      messages: [user('m1', 'history')],
+    })
+    await expect(collect(onlyAdapter(h).stream(options))).resolves.toEqual([REVIEW_FINISH])
+    expect(h.review.requests).toHaveLength(1)
+    expect(h.review.requests[0]).toMatchObject({
+      provider: 'deepseek',
+      model: 'deepseek-chat',
+      system: 'REVIEW_POLICY',
+      temperature: 0,
+      purpose: 'auto-review',
+    })
+    expect(h.subprocess.spawned).toEqual([])
+  })
+
+  it('uses the configured review route instead of discovering one', async () => {
+    const h = harness()
+    h.review.providers = ['deepseek']
+    h.review.models = { deepseek: ['deepseek-chat'] }
+    await start(h, { reviewProvider: 'configured', reviewModel: 'reviewer' })
+    const options = request({ purpose: 'auto-review' })
+    await collect(onlyAdapter(h).stream(options))
+    expect(h.review.requests[0]).toMatchObject({ provider: 'configured', model: 'reviewer' })
+  })
+
+  it('reports a missing review route instead of sending it to the CLI', async () => {
+    const h = harness()
+    await start(h)
+    const options = request({ purpose: 'auto-review' })
+    await expect(collect(onlyAdapter(h).stream(options))).rejects.toMatchObject({
+      code: 'UNSUPPORTED_OPTION',
+      message: /审查模型/,
+    })
+    expect(h.subprocess.spawned).toEqual([])
+  })
+
+  it('refuses Auto at the start of a turn when no review route exists', async () => {
+    const h = harness()
+    await start(h)
+    addAgent(h)
+    emitSessionEvent(h, 'dsh-1', { type: 'permission/preset', data: { preset: 'auto' } })
+    openTurn(h, 'dsh-1', ['m1'])
+    const turn = collect(onlyAdapter(h).stream(request({ messages: [user('m1', 'hello')] })))
+    await expect(turn).rejects.toMatchObject({ code: 'CLI_WRONG_PRESET' })
+    expect(h.subprocess.spawned).toEqual([])
+  })
+
+  it('runs a CLI turn under Auto once a review route exists', async () => {
+    const h = harness()
+    h.review.providers = ['deepseek']
+    h.review.models = { deepseek: ['deepseek-chat'] }
+    await start(h)
+    addAgent(h)
+    emitSessionEvent(h, 'dsh-1', { type: 'permission/preset', data: { preset: 'auto' } })
+    openTurn(h, 'dsh-1', ['m1'])
+    await expect(collect(onlyAdapter(h).stream(request({ messages: [user('m1', 'hello')] })))).resolves.toBeDefined()
+    expect(h.subprocess.spawned).toHaveLength(1)
+  })
+
+  it('runs a CLI turn under full access without a review route', async () => {
+    const h = harness()
+    await start(h)
+    addAgent(h)
+    emitSessionEvent(h, 'dsh-1', { type: 'permission/preset', data: { preset: 'danger-full-access' } })
+    openTurn(h, 'dsh-1', ['m1'])
+    await expect(collect(onlyAdapter(h).stream(request({ messages: [user('m1', 'hello')] })))).resolves.toBeDefined()
+    expect(h.subprocess.spawned).toHaveLength(1)
   })
 })
 

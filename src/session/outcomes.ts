@@ -22,6 +22,19 @@ export interface StepResult extends BlockTransition {
   readonly done: boolean
 }
 
+/** Why a CLI turn ended, plus what it said before ending. */
+export interface TurnOutcome {
+  readonly stopReason: StopReason
+  /**
+   * Text the CLI emitted in this step. ACP's `PromptResponse` has no error field,
+   * so a refusal's real reason only arrives as `session/update` content.
+   */
+  readonly text: string
+}
+
+/** Long refusals would bury the reason in a whole answer; keep its tail. */
+const REFUSAL_DETAIL_LIMIT = 400
+
 /** @returns the error's message, or its string form for anything thrown that is not an Error. */
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -31,26 +44,41 @@ function failureFinish(message: string, code: string): FinishReason {
   return { kind: 'error', failure: { message, code } }
 }
 
+/** Collapse a CLI explanation into one line, keeping its tail if it is long. */
+function refusalDetail(text: string): string {
+  const clean = text.replace(/\s+/g, ' ').trim()
+  if (clean.length <= REFUSAL_DETAIL_LIMIT) return clean
+  return `…${clean.slice(clean.length - REFUSAL_DETAIL_LIMIT)}`
+}
+
 /**
- * Map an ACP stop reason onto the harness's finish reason.
- * @param stopReason - why the CLI ended its turn.
+ * Map an ACP stop reason onto the harness's finish reason. A refusal has no
+ * structured reason in ACP, so the text the CLI already streamed is the only
+ * place the user can learn why the model was refused.
+ * @param end - why the CLI ended its turn and what it said.
  * @param label - CLI display name used in user-facing messages.
  * @returns the finish reason the harness should record.
  */
-function finishReason(stopReason: StopReason, label: string): FinishReason {
-  switch (stopReason) {
+function finishReason(end: TurnOutcome, label: string): FinishReason {
+  switch (end.stopReason) {
     case 'end_turn':
       return { kind: 'stop' }
     case 'max_tokens':
       return { kind: 'max-tokens' }
     case 'cancelled':
       return { kind: 'aborted', failure: { message: `${label} 已取消本轮。`, code: 'ABORTED' } }
-    case 'refusal':
-      return failureFinish(`${label} 拒绝继续这个请求。`, 'CLI_REFUSAL')
+    case 'refusal': {
+      const detail = refusalDetail(end.text)
+      const message =
+        detail === ''
+          ? `${label} 拒绝继续这个请求，但未说明原因（可查看 CLI 日志了解详情）。`
+          : `${label} 拒绝继续这个请求：${detail}`
+      return failureFinish(message, 'CLI_REFUSAL')
+    }
     case 'max_turn_requests':
       return failureFinish(`${label} 达到了单轮请求次数上限。`, 'CLI_TURN_LIMIT')
     default:
-      return failureFinish(`${label} 以未知原因结束：${String(stopReason)}`, 'CLI_UNKNOWN_STOP')
+      return failureFinish(`${label} 以未知原因结束：${String(end.stopReason)}`, 'CLI_UNKNOWN_STOP')
   }
 }
 
@@ -73,16 +101,11 @@ export function toolCallStep(blocks: BlockState, record: ToolRecord, replay: Rep
  * End a harness step at the end of the CLI turn.
  * @returns the closing chunks followed by the turn's finish.
  */
-export function turnEndStep(
-  blocks: BlockState,
-  stopReason: StopReason,
-  label: string,
-  replay: ReplayFields,
-): StepResult {
+export function turnEndStep(blocks: BlockState, end: TurnOutcome, label: string, replay: ReplayFields): StepResult {
   const { state, chunks } = closeOpenBlock(blocks)
   return {
     state,
-    chunks: [...chunks, { type: 'finish', reason: finishReason(stopReason, label), ...replay }],
+    chunks: [...chunks, { type: 'finish', reason: finishReason(end, label), ...replay }],
     done: true,
   }
 }

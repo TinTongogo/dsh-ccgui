@@ -21,6 +21,7 @@ import {
   ROW_CHECK_CLASS,
   ROW_CLASS,
   ROW_MARK_CLASS,
+  ROW_DESCRIPTION_CLASS,
   ROW_NAME_CLASS,
   ROWS_CLASS,
   SEARCH_CLASS,
@@ -65,6 +66,11 @@ function ModelRow({ domId, model, selected, settling, active, busy, onHover, onC
       {/* The slot stays when there is no mark, so every name starts at the same place. */}
       <span className={ROW_MARK_CLASS}>{mark === undefined ? null : <MarkGlyph id={mark} size={ROW_MARK_SIZE} />}</span>
       <span className={ROW_NAME_CLASS}>{model.name}</span>
+      {model.description !== undefined && (
+        <span className={ROW_DESCRIPTION_CLASS} title={model.description}>
+          {model.description}
+        </span>
+      )}
       <span className={ROW_CHECK_CLASS}>{settling ? <StateDot state="ongoing" /> : check}</span>
     </button>
   )

@@ -11,6 +11,8 @@ import { DEFAULT_MODEL_ID } from './constants.ts'
 export interface CliModelOption {
   readonly value: string
   readonly name: string
+  /** What the CLI says about the model, typically its usage cost multiplier. */
+  readonly description?: string
 }
 
 /** The reasoning levels a model offers and which one is set. */
@@ -42,6 +44,7 @@ interface ReadEntry extends CliModelOption {
 const CONVENTIONAL_MODEL_OPTION_ID = 'model'
 const MODEL_CATEGORY = 'model'
 const EFFORT_CATEGORY = 'thought_level'
+/** Joins a model name and the detail that distinguishes it. */
 const NAME_SEPARATOR = ' · '
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
@@ -67,20 +70,24 @@ function readEntry(entry: unknown): readonly ReadEntry[] {
 }
 
 /**
- * A CLI can list several models under one name, CodeBuddy's free and paid tiers of Hy4 among
- * them, which would leave rows nobody can tell apart. Such names gain what does tell them apart:
- * the descriptions when those differ, otherwise the ids. The default entry is left alone, as the
- * catalog labels it on its own and it is expected to share its model's name.
+ * A CLI can list several models under one name, CodeBuddy's free and paid tiers of Hy4
+ * among them, which would leave rows nobody can tell apart. Names stay exactly as the CLI
+ * gave them: the menu shows each description beside its name, and differing descriptions
+ * are what tell those rows apart. Only when descriptions cannot do that do the ids join
+ * the name. The default entry's description already names the model it stands for, so it
+ * is not repeated beside the name.
  */
 function distinguishNames(entries: readonly ReadEntry[]): readonly CliModelOption[] {
   const named = entries.filter(({ value }) => value !== DEFAULT_MODEL_ID)
   const peersOf = (name: string): readonly ReadEntry[] => named.filter((entry) => entry.name === name)
   return entries.map(({ value, name, description }) => {
+    const withDescription = description === undefined ? { value, name } : { value, name, description }
+    if (value === DEFAULT_MODEL_ID) return { value, name }
     const peers = peersOf(name)
-    if (value === DEFAULT_MODEL_ID || peers.length < 2) return { value, name }
+    if (peers.length < 2) return withDescription
     const descriptions = new Set(peers.map((peer) => peer.description))
-    const byDescription = descriptions.size === peers.length && !descriptions.has(undefined)
-    return { value, name: `${name}${NAME_SEPARATOR}${(byDescription ? description : undefined) ?? value}` }
+    if (descriptions.size === peers.length && !descriptions.has(undefined)) return withDescription
+    return { ...withDescription, name: `${name}${NAME_SEPARATOR}${value}` }
   })
 }
 

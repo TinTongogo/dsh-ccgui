@@ -12,7 +12,12 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { DirectorySelection, DirectoryState } from '../../src/client/choices.ts'
 import { CliModelMenu } from '../../src/client/model-menu.tsx'
 import type { ModelMenuInjected } from '../../src/client/model-menu.tsx'
-import { MENU_CLASS, ROW_ACTIVE_CLASS, ROW_MARK_CLASS } from '../../src/client/model-menu-styles.ts'
+import {
+  MENU_CLASS,
+  ROW_ACTIVE_CLASS,
+  ROW_DESCRIPTION_CLASS,
+  ROW_MARK_CLASS,
+} from '../../src/client/model-menu-styles.ts'
 import { createStore } from '../fixtures/client-store.ts'
 import type { TestStore } from '../fixtures/client-store.ts'
 
@@ -138,6 +143,31 @@ describe('CliModelMenu opening and closing', () => {
     const { user } = setup(directoryState(FEW_MODELS, 'fake-small'))
     await user.click(trigger())
     expect(rows().map((row) => row.getAttribute('aria-checked'))).toEqual(['false', 'true', 'false'])
+  })
+
+  // Names stay as the CLI gave them; the cost multiplier is small print on the right.
+  it('shows a CLI cost multiplier beside a clean model name', async () => {
+    const priced = [
+      { id: 'default', name: 'Hy4（默认）' },
+      { id: 'hy4free', name: 'Hy4', description: 'x0.00 credits' },
+      { id: 'hy4std', name: 'Hy4', description: 'x0.29 credits' },
+    ]
+    const { user } = setup(directoryState(priced, 'hy4std'))
+    await user.click(trigger())
+    expect(rowNames()).toEqual(['Hy4（默认）', 'Hy4', 'Hy4'])
+    expect(trigger().getAttribute('title')).toBe('Hy4')
+    const small = rows().map((row) => row.querySelector(`.${ROW_DESCRIPTION_CLASS}`))
+    expect(small.map((node) => node?.textContent ?? null)).toEqual([null, 'x0.00 credits', 'x0.29 credits'])
+    expect(small[1]?.getAttribute('title')).toBe('x0.00 credits')
+    // The small print joins the row's accessible name, so e2e picks rows by their title,
+    // which stays the model name alone. Keep that selector usable.
+    expect(document.querySelectorAll('[role="menuitemradio"][title="Hy4"]')).toHaveLength(2)
+  })
+
+  it('leaves no small print on a model without a description', async () => {
+    const { user } = setup()
+    await user.click(trigger())
+    expect(document.querySelectorAll(`.${ROW_DESCRIPTION_CLASS}`)).toHaveLength(0)
   })
 
   it('closes when the trigger is pressed again, keeping focus on it', async () => {

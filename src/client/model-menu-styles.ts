@@ -17,6 +17,7 @@ export const ROW_CLASS = 'dsh-cli-model-row'
 export const ROW_ACTIVE_CLASS = 'dsh-cli-model-row-active'
 export const ROW_MARK_CLASS = 'dsh-cli-model-row-mark'
 export const ROW_NAME_CLASS = 'dsh-cli-model-row-name'
+export const ROW_DESCRIPTION_CLASS = 'dsh-cli-model-row-description'
 export const ROW_CHECK_CLASS = 'dsh-cli-model-row-check'
 export const HINT_CLASS = 'dsh-cli-model-hint'
 export const HEADING_CLASS = 'dsh-cli-model-heading'
@@ -131,6 +132,17 @@ export const MODEL_MENU_STYLES = `
   min-width: 0;
   overflow: hidden;
   font-size: 13px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.${ROW_DESCRIPTION_CLASS} {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  color: var(--dsw-alias-label-caption);
+  font-size: 11px;
   line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -24,8 +24,38 @@ export interface ModelCatalogDeps {
   save(lists: ReadonlyMap<string, CliModelList>): Promise<void>
 }
 
+/**
+ * The menu shows the CLI's description as small print beside the name, so names stay
+ * exactly as the CLI gave them. It usually carries the usage cost multiplier, which the
+ * user needs before picking a model.
+ */
+function modelInfo(provider: string, option: CliModelOption): LlmModelInfo {
+  return {
+    provider,
+    id: option.value,
+    name: option.name,
+    ...(option.description === undefined ? {} : { description: option.description }),
+  }
+}
+
 function nameOf(list: CliModelList, value: string): string {
-  return list.options.find((option) => option.value === value)?.name ?? value
+  return list.options.find((candidate) => candidate.value === value)?.name ?? value
+}
+
+/**
+ * Names whose rows are told apart by their descriptions rather than being duplicates.
+ * CodeBuddy lists free and paid tiers of Hy4 under the same name, with `x0.00 credits`
+ * and `x0.29 credits` beside them; filtering those as aliases would hide a real choice.
+ */
+function pricedTiers(options: readonly CliModelOption[]): ReadonlySet<string> {
+  return new Set(
+    [...new Set(options.map(({ name }) => name))].filter((name) => {
+      const descriptions = new Set(
+        options.filter((option) => option.name === name).map(({ description }) => description),
+      )
+      return descriptions.size > 1 && !descriptions.has(undefined)
+    }),
+  )
 }
 
 /**
@@ -34,15 +64,18 @@ function nameOf(list: CliModelList, value: string): string {
  * names, so the row would repeat it. Claude Code's `opus` alias is such a row while it
  * resolves to the same model as its `default`; if the two part ways, their names do as well.
  * Older versions are left out as well; they stay resolvable for a session already on one.
+ * Rows that share a name but carry distinct descriptions are none of these: they are
+ * differently priced tiers the user can only tell apart in the menu.
  */
 function selectableOptions(list: CliModelList): readonly CliModelOption[] {
   const { options } = list
   const defaultName = nameOf(list, list.current)
   const older = olderVersions(options.map(({ name }) => name))
+  const tiers = pricedTiers(options)
   return options.filter(
     ({ value, name }, index) =>
       value !== DEFAULT_MODEL_ID &&
-      name !== defaultName &&
+      (name !== defaultName || tiers.has(name)) &&
       !older.has(name) &&
       options.findIndex((option) => option.value === value) === index,
   )
@@ -70,7 +103,7 @@ export class CliModelCatalog {
     }
     return [
       { provider, id: DEFAULT_MODEL_ID, name: this.defaultName(list) },
-      ...selectableOptions(list).map(({ value, name }) => ({ provider, id: value, name })),
+      ...selectableOptions(list).map((option) => modelInfo(provider, option)),
     ]
   }
 

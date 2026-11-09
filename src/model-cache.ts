@@ -18,7 +18,11 @@ const isText = (value: unknown): value is string => typeof value === 'string' &&
 
 function readOption(value: unknown): CliModelOption | undefined {
   if (!isObject(value) || !isText(value.value) || !isText(value.name)) return undefined
-  return { value: value.value, name: value.name }
+  return {
+    value: value.value,
+    name: value.name,
+    ...(isText(value.description) ? { description: value.description } : {}),
+  }
 }
 
 type OptionList = Omit<CliModelList, 'efforts'>

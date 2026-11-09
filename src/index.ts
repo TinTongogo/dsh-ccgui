@@ -12,7 +12,8 @@ import { Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-preset-registry'
-import type {} from '@deepseek-ai/dsh-llm'
+import { LlmError } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-subprocess'
 import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
@@ -76,6 +77,16 @@ export interface Config {
   cancelGraceMs: number
   /** Time a CLI may take to start and accept a session, which must allow for a cold `npx` download. */
   startTimeoutMs: number
+  /** Stateless provider for auto-review requests; empty picks the first non-CLI provider. */
+  reviewProvider: string
+  /** Model on that provider; empty picks its first listed model. */
+  reviewModel: string
+}
+
+/** A stateless provider/model pair that can serve auxiliary requests. */
+interface ReviewRoute {
+  readonly provider: string
+  readonly model: string
 }
 
 /** Service behind `ctx.cliBridge`. */
@@ -98,6 +109,8 @@ export default class CliBridge extends Service {
     disposeEofGraceMs: z.number().min(1).default(6_000),
     cancelGraceMs: z.number().min(1).default(10_000),
     startTimeoutMs: z.number().min(1).default(120_000),
+    reviewProvider: z.string().default(''),
+    reviewModel: z.string().default(''),
   })
 
   private readonly registry: CliSessionRegistry
@@ -129,6 +142,7 @@ export default class CliBridge extends Service {
       ask: (agent, request, signal) => this.ask(agent, request, signal),
       warn: (message) => ctx.logger.warn(message),
       onCliSelected: (provider) => this.catalog.ensureListed(provider),
+      hasReviewRoute: () => this.hasReviewRoute(),
       createSession: (agent, sessionId, cwd, start) => this.createSession(agent, sessionId, cwd, start),
     })
     const modelCache = new ModelCacheFile(this.homePath(PLUGIN_HOME, MODEL_CACHE_FILE))
@@ -194,6 +208,7 @@ export default class CliBridge extends Service {
           modelsFor: (provider) => catalog.listModels(provider),
           modelName: (provider, model) => catalog.modelName(provider, model),
           reasoningFor: (provider, model) => catalog.reasoning(provider, model),
+          auxiliaryStream: (options) => this.auxiliaryStream(options),
         }),
       )
     }
@@ -202,6 +217,58 @@ export default class CliBridge extends Service {
     ctx.tools.register(createCliTool({ waitForTool: (exec) => registry.waitForTool(exec) }), {
       when: ({ modelSelection }) => registry.isCliRoute(modelSelection.provider),
     })
+  }
+
+  /** Provider routes the harness can serve without touching a CLI conversation. */
+  private nonCliProviders(): readonly string[] {
+    return this.ctx.llm
+      .listProviders()
+      .map(({ id }) => id)
+      .filter((id) => !this.registry.isCliRoute(id))
+  }
+
+  /** Synchronous gate used before a CLI starts: is there anywhere to review? */
+  private hasReviewRoute(): boolean {
+    return this.config.reviewProvider !== '' || this.nonCliProviders().length > 0
+  }
+
+  private async firstModel(provider: string): Promise<string | undefined> {
+    try {
+      const models = await this.ctx.llm.listModels(provider)
+      return models[0]?.id
+    } catch (error: unknown) {
+      this.ctx.logger.warn(`ccgui: could not list models for ${provider}: ${String(error)}`)
+      return undefined
+    }
+  }
+
+  private async reviewRoute(): Promise<ReviewRoute | undefined> {
+    const { reviewProvider, reviewModel } = this.config
+    if (reviewProvider !== '') {
+      const model = reviewModel === '' ? await this.firstModel(reviewProvider) : reviewModel
+      return model === undefined ? undefined : { provider: reviewProvider, model }
+    }
+    for (const provider of this.nonCliProviders()) {
+      const model = await this.firstModel(provider)
+      if (model !== undefined) return { provider, model }
+    }
+    return undefined
+  }
+
+  /**
+   * Reviewer calls arrive stamped with the main agent's CLI route. Re-route them
+   * to a stateless provider, keeping the frozen request intact, so the review
+   * policy and history never become a `session/prompt` in the user's CLI turn.
+   */
+  private async *auxiliaryStream(options: GenerateOptions): AsyncGenerator<StreamChunk> {
+    const route = await this.reviewRoute()
+    if (route === undefined) {
+      throw new LlmError(
+        '「EXP 自动审查」需要独立的审查模型，但当前没有可用的非 CLI 模型路由；请在插件配置里设置 reviewProvider / reviewModel，或改用其它权限预设。',
+        'UNSUPPORTED_OPTION',
+      )
+    }
+    yield* this.ctx.llm.stream({ ...options, provider: route.provider, model: route.model })
   }
 
   private followSessions(): void {

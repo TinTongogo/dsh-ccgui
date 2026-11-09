@@ -62,7 +62,7 @@ describe('readModelList', () => {
     ]
     expect(readModelList([select({ category: 'model', currentValue: 'default', options })])?.options).toEqual([
       { value: 'default', name: 'Opus 5.5' },
-      { value: 'haiku', name: 'Haiku 5.5' },
+      { value: 'haiku', name: 'Haiku 5.5', description: 'Fastest for quick answers' },
     ])
   })
 
@@ -73,17 +73,19 @@ describe('readModelList', () => {
     ])
   })
 
-  // Recorded from CodeBuddy: two tiers of one model share a name, and only the price tells them apart.
-  it('tells apart models that share a name by their descriptions', () => {
+  // Recorded from CodeBuddy: the description carries the usage cost multiplier. Names
+  // stay as the CLI gave them; the menu shows the multiplier beside each name, which is
+  // also what tells the two Hy4 tiers apart.
+  it('keeps descriptions beside clean names, even for models that share a name', () => {
     const options = [
       { value: 'hy4free', name: 'Hy4', description: 'x0.00 credits' },
       { value: 'hy4std', name: 'Hy4', description: 'x0.29 credits' },
       { value: 'glm', name: 'GLM', description: 'x0.69 credits' },
     ]
     expect(readModelList([select({ category: 'model', currentValue: 'hy4free', options })])?.options).toEqual([
-      { value: 'hy4free', name: 'Hy4 · x0.00 credits' },
-      { value: 'hy4std', name: 'Hy4 · x0.29 credits' },
-      { value: 'glm', name: 'GLM' },
+      { value: 'hy4free', name: 'Hy4', description: 'x0.00 credits' },
+      { value: 'hy4std', name: 'Hy4', description: 'x0.29 credits' },
+      { value: 'glm', name: 'GLM', description: 'x0.69 credits' },
     ])
   })
 
@@ -95,8 +97,8 @@ describe('readModelList', () => {
       { value: 'k-fast', name: 'K' },
     ]
     expect(readModelList([select({ category: 'model', currentValue: 'hy3', options })])?.options).toEqual([
-      { value: 'hy3', name: 'Hy3 · hy3' },
-      { value: 'hy3-x', name: 'Hy3 · hy3-x' },
+      { value: 'hy3', name: 'Hy3 · hy3', description: 'same' },
+      { value: 'hy3-x', name: 'Hy3 · hy3-x', description: 'same' },
       { value: 'k', name: 'K · k' },
       { value: 'k-fast', name: 'K · k-fast' },
     ])
@@ -110,7 +112,7 @@ describe('readModelList', () => {
     ]
     expect(readModelList([select({ category: 'model', currentValue: 'default', options })])?.options).toEqual([
       { value: 'default', name: 'Opus 5.5' },
-      { value: 'opus', name: 'Opus 5.5' },
+      { value: 'opus', name: 'Opus 5.5', description: 'Most capable' },
     ])
   })
 

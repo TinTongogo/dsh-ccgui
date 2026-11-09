@@ -91,6 +91,50 @@ describe('CliModelCatalog', () => {
     expect(catalog.modelName('cli-x', 'claude-opus-5')).toBe('Opus 5')
   })
 
+  // CodeBuddy reports the usage cost multiplier as each option's description. The menu
+  // shows it as small print beside the name, so the catalog keeps the two fields apart.
+  it('keeps names clean and exposes the cost multiplier as a description', async () => {
+    const priced: CliModelList = {
+      configId: 'model',
+      current: 'hy4std',
+      options: [
+        { value: 'hy4free', name: 'Hy4', description: 'x0.00 credits' },
+        { value: 'hy4std', name: 'Hy4', description: 'x0.29 credits' },
+        { value: 'glm', name: 'GLM', description: 'x0.69 credits' },
+      ],
+    }
+    const { catalog } = setup(() => Promise.resolve(priced))
+    catalog.ensureListed('cli-x')
+    await settled()
+    expect(catalog.listModels('cli-x')).toEqual([
+      { provider: 'cli-x', id: 'default', name: 'Hy4（默认）' },
+      { provider: 'cli-x', id: 'hy4free', name: 'Hy4', description: 'x0.00 credits' },
+      { provider: 'cli-x', id: 'hy4std', name: 'Hy4', description: 'x0.29 credits' },
+      { provider: 'cli-x', id: 'glm', name: 'GLM', description: 'x0.69 credits' },
+    ])
+    expect(catalog.modelName('cli-x', 'glm')).toBe('GLM')
+    expect(catalog.modelName('cli-x', 'default')).toBe('Hy4（默认）')
+  })
+
+  // Only distinct descriptions make a tier. Without them the row is still the alias
+  // the upstream filter hides, so that de-duplication must not be loosened.
+  it('still hides a same-name alias when descriptions do not tell the rows apart', async () => {
+    const { catalog } = setup(() =>
+      Promise.resolve({
+        configId: 'model',
+        current: 'default',
+        options: [
+          { value: 'default', name: 'Opus 5.5', description: 'x1.00 credits' },
+          { value: 'opus', name: 'Opus 5.5', description: 'x1.00 credits' },
+          { value: 'sonnet', name: 'Sonnet 5.5' },
+        ],
+      }),
+    )
+    catalog.ensureListed('cli-x')
+    await settled()
+    expect(catalog.listModels('cli-x').map((model) => model.id)).toEqual(['default', 'sonnet'])
+  })
+
   it('tells the UI when the list arrives', async () => {
     const { catalog, deps } = setup()
     catalog.ensureListed('cli-x')

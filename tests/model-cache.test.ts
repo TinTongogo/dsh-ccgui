@@ -97,6 +97,17 @@ describe('ModelCacheFile', () => {
     expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({ version: 1 })
   })
 
+  it('keeps the cost multiplier through a save and read back', async () => {
+    const path = scratch()
+    const priced: CliModelList = {
+      configId: 'model',
+      current: 'glm',
+      options: [{ value: 'glm', name: 'GLM', description: 'x0.69 credits' }],
+    }
+    await new ModelCacheFile(path).save(new Map([['cli-x', priced]]))
+    await expect(new ModelCacheFile(path).read()).resolves.toEqual(new Map([['cli-x', priced]]))
+  })
+
   it('reads a corrupt file as empty', async () => {
     const path = scratch()
     const file = new ModelCacheFile(path)
