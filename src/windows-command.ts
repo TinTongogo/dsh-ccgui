@@ -48,6 +48,12 @@ const NPM_PROG = '%_prog%'
  */
 const SHIM_LAUNCH = /(?:("[^"]*"|[^\s"]+)[ \t]+)?"%~?dp0%?\\([^"]*)"[ \t]+%\*/g
 const NPM_PROG_VALUE = /SET "_prog=([^"]+)"/g
+/**
+ * The line the `npm.cmd` and `npx.cmd` shipped with Node.js start on: the interpreter and the
+ * script both come from variables set earlier in the file.
+ */
+const VARIABLE_LAUNCH = /^[ \t]*"%(\w+)%"[ \t]+"%(\w+)%"[ \t]+%\*/gm
+const DP0_PREFIX = /^%(?:~dp0|dp0%)\\/i
 
 interface ShimLaunch {
   readonly interpreter: string | undefined
@@ -98,6 +104,25 @@ function readLaunch(shim: string): ShimLaunch | undefined {
   return { interpreter: fallback ?? DEFAULT_INTERPRETER, target }
 }
 
+function assignments(shim: string, name: string): readonly string[] {
+  return [...shim.matchAll(new RegExp(`SET "${name}=([^"]+)"`, 'gi'))].flatMap((match) => match[1] ?? [])
+}
+
+/**
+ * Node's own `npx.cmd` runs `<dp0>\\node.exe`, else `node`, on the npx script beside it. It also
+ * switches to the npx of a globally upgraded npm, which it finds by running node; that switch
+ * is skipped, since the bundled npx starts the same packages.
+ */
+function readVariableLaunch(shim: string): ShimLaunch | undefined {
+  const [last] = [...shim.matchAll(VARIABLE_LAUNCH)].slice(-1)
+  if (last?.[1] === undefined || last[2] === undefined) return undefined
+  const target = assignments(shim, last[2]).find((value) => DP0_PREFIX.test(value))
+  if (target === undefined) return undefined
+  // As with npm's `_prog`, the value without dp0 is the fallback; dp0 is tried first anyway.
+  const interpreter = assignments(shim, last[1]).find((value) => !DP0_PREFIX.test(value))
+  return { interpreter: interpreter ?? DEFAULT_INTERPRETER, target: target.replace(DP0_PREFIX, '') }
+}
+
 function unsupported(shim: string): Error {
   return new Error(
     `无法在不经过命令行的情况下启动 ${shim}。请在配置里把这个 CLI 的 command 改成 .exe 或它的 node 脚本的完整路径。`,
@@ -129,7 +154,7 @@ function interpreterArgv(interpreter: string, shim: string, lookup: WindowsLooku
 
 function argvForShim(shim: string, args: readonly string[], lookup: WindowsLookup, depth: number): readonly string[] {
   const text = lookup.files.read(shim)
-  const launch = text === undefined ? undefined : readLaunch(text)
+  const launch = text === undefined ? undefined : (readLaunch(text) ?? readVariableLaunch(text))
   if (launch === undefined) throw unsupported(shim)
   const shimDir = win32.dirname(shim)
   const target = win32.resolve(shimDir, launch.target)

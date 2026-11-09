@@ -48,6 +48,29 @@ CALL :find_dp0
 "%dp0%\\${target}"   %*
 `
 
+/** The `npx.cmd` the Node.js installer puts next to node.exe (npm 10 and later). */
+const NODE_INSTALLER_NPX = `:: Created by npm, please don't edit manually.
+@ECHO OFF
+
+SETLOCAL
+
+SET "NODE_EXE=%~dp0\\node.exe"
+IF NOT EXIST "%NODE_EXE%" (
+  SET "NODE_EXE=node"
+)
+
+SET "NPM_PREFIX_JS=%~dp0\\node_modules\\npm\\bin\\npm-prefix.js"
+SET "NPX_CLI_JS=%~dp0\\node_modules\\npm\\bin\\npx-cli.js"
+FOR /F "delims=" %%F IN ('CALL "%NODE_EXE%" "%NPM_PREFIX_JS%"') DO (
+  SET "NPM_PREFIX_NPX_CLI_JS=%%F\\node_modules\\npm\\bin\\npx-cli.js"
+)
+IF EXIST "%NPM_PREFIX_NPX_CLI_JS%" (
+  SET "NPX_CLI_JS=%NPM_PREFIX_NPX_CLI_JS%"
+)
+
+"%NODE_EXE%" "%NPX_CLI_JS%" %*
+`
+
 const files = (entries: Readonly<Record<string, string>>): FileProbe => {
   const byLowerPath = new Map(Object.entries(entries).map(([path, content]) => [path.toLowerCase(), content]))
   return {
@@ -83,6 +106,34 @@ describe('resolveWindowsCommand', () => {
       '-y',
       'pi-acp@0.0.34',
     ])
+  })
+
+  it('starts the npx.cmd the Node.js installer ships, which keeps its paths in variables', () => {
+    const probe = files({ 'D:\\nodejs\\npx.cmd': NODE_INSTALLER_NPX, 'D:\\nodejs\\node.exe': '' })
+    const result = resolveWindowsCommand(
+      { argv: ['npx', '-y', 'pi-acp@0.0.34'], env: {} },
+      { path: 'D:\\nodejs', pathExt: PATHEXT, files: probe },
+    )
+    expect(result.argv).toEqual([
+      'D:\\nodejs\\node.exe',
+      'D:\\nodejs\\node_modules\\npm\\bin\\npx-cli.js',
+      '-y',
+      'pi-acp@0.0.34',
+    ])
+  })
+
+  it('falls back to the node on PATH when the installer npx.cmd has no node.exe beside it', () => {
+    const probe = files({ 'D:\\nodejs\\npx.cmd': NODE_INSTALLER_NPX, [NODE]: '' })
+    const result = resolveWindowsCommand(
+      { argv: ['npx'], env: {} },
+      { path: `D:\\nodejs;C:\\Program Files\\nodejs`, pathExt: PATHEXT, files: probe },
+    )
+    expect(result.argv).toEqual([NODE, 'D:\\nodejs\\node_modules\\npm\\bin\\npx-cli.js'])
+  })
+
+  it('refuses a variable launch line whose script is not beside the shim', () => {
+    const probe = files({ [`${NPM_BIN}\\odd.cmd`]: '@SET "A=node"\r\n@SET "B=C:\\x.js"\r\n"%A%" "%B%" %*\r\n' })
+    expect(() => resolve(['odd'], probe)).toThrow(/odd\.cmd/)
   })
 
   it('prefers the node.exe next to the shim, as the shim itself does', () => {
