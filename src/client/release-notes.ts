@@ -30,6 +30,25 @@ export interface ReleaseNote {
 /** In display order: the first page is the newest release. */
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: '1.0.3',
+    date: '2026-11-09',
+    sections: [
+      {
+        heading: '🐛 问题修复',
+        items: [
+          {
+            title: 'Windows 上 npx 系 CLI 起不来',
+            text: 'Node.js 安装包自带的 `npx.cmd` 把路径存在变量里，插件之前解析不出来，Claude Code、Codex、Kimi、PI 都报「无法在不经过命令行的情况下启动 npx.cmd」。现在能认出这种写法，用旁边的 `node.exe`（或 `PATH` 里的 node）直接运行 `npx-cli.js`。',
+          },
+          {
+            title: '升级提示',
+            text: '之前为了绕过这个问题在 `cordis.patch.yml` 里改成 `cmd /c npx ...` 的，升级后可以删掉那段配置、恢复默认，否则收不到以后的适配器版本更新。',
+          },
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.2',
     date: '2026-11-08',
     sections: [
