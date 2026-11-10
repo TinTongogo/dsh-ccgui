@@ -3,10 +3,10 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { RELEASE_NOTES } from '../../src/client/release-notes.ts'
 
-// The tab ships bundled data while a release also writes RELEASE_NOTES_vX.Y.Z.md at the root.
+// The tab ships bundled data while a release also writes docs/release-notes/vX.Y.Z.md.
 // Keeping the shape and the files in step is what stops the two from drifting apart.
-const root = fileURLToPath(new URL('../..', import.meta.url))
-const NOTES_FILE = /^RELEASE_NOTES_v(.+)\.md$/
+const notesDir = fileURLToPath(new URL('../../docs/release-notes/', import.meta.url))
+const NOTES_FILE = /^v(.+)\.md$/
 const SEMVER = /^\d+\.\d+\.\d+$/
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -45,7 +45,7 @@ describe('RELEASE_NOTES', () => {
   })
 
   it('has a page for every release notes file in the repository', () => {
-    const files = readdirSync(root).filter((name) => NOTES_FILE.test(name))
+    const files = readdirSync(notesDir).filter((name) => NOTES_FILE.test(name))
     expect(files.length).toBeGreaterThan(0)
     const versions = new Set(RELEASE_NOTES.map((note) => note.version))
     for (const file of files) {

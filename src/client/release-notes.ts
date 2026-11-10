@@ -1,6 +1,6 @@
 /**
  * The release notes the settings page's 版本记录 tab pages through, newest first. They live
- * as data rather than as the repository's `RELEASE_NOTES_v*.md` files because the client is a
+ * as data rather than as the repository's `docs/release-notes/v*.md` files because the client is a
  * browser bundle with no markdown reader, and this tab should read the same offline.
  * @module dsh-ccgui/client/release-notes
  */
