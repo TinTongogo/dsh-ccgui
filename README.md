@@ -103,6 +103,23 @@ CLI 和模型各有一个菜单。模型菜单列出当前 CLI 真实可用的�
   <img alt="启动脚本截图：会话标题栏的脚本菜单，和终端里运行中的 npm run dev" src="./assets/illustrations/05-launch-scripts-light.webp" />
 </picture>
 
+### 新建 Worktree
+
+在左侧栏项目上右键「新建 Worktree…」，可以从新分支、已有分支或 PR 创建 Git worktree。worktree 默认放在仓库同级的 `<仓库名>-worktrees/<分支名>` 下，创建后可以直接在里面打开新会话。
+
+worktree 收在所属项目下面的「Worktrees · N」分组里，展开后每个 worktree 一行，再展开是它的会话。右键 worktree 或会话弹出的是 DSH 自己的菜单，重命名、删除、置顶、归档都照常可用。
+
+<details>
+<summary>细节</summary>
+
+- 新分支从选定的 base 创建，不跟踪 base；base 是远程分支时先 fetch。已有的远程分支会在本地建同名分支并跟踪它。
+- 「从 PR 创建」接受 `123`、`#123` 或 PR 链接，从 GitHub 发布的 `refs/pull/<编号>/head` 拉取，不需要 `gh`。有 `upstream` 远程时优先用它（fork 的 PR 在那里）；填链接时按链接里的仓库匹配远程。
+- 分组按 Git 判断：一个工作区是某个仓库的 worktree、且这个仓库本身也是工作区时，就收进它的分组，在插件之外（比如命令行、CC GUI）建的 worktree 也一样。仓库本身没加成工作区的 worktree 照常显示在顶层。
+- 每个 worktree 仍是一个独立的 DSH 工作区，标题是「仓库名 / 分支名」，输入框上方的工作区名显示的就是它。
+- DSH 的侧边栏没有给工作区留嵌套的扩展点，分组是插件按侧边栏的结构插进去的。DSH 改了侧边栏结构的话，分组会消失，worktree 退回顶层显示，不影响使用。
+
+</details>
+
 ### 文件和终端
 
 「工作区文件」里右键「添加到对话」，把 `@路径` 插到光标处；标题栏的终端按钮一键开关右侧栏终端。
@@ -281,6 +298,7 @@ export CHROMIUM_PATH=/path/to/chromium   # Playwright 自带的浏览器版本�
 
 e2e/start-server.sh &             # 另开一个终端也可以
 node e2e/fake-cli.mjs             # 脚本化的假 CLI，结果确定
+node e2e/worktree.mjs             # 项目右键新建 Worktree（新分支、PR、嵌套分组、失败提示）
 
 # 真实 CLI，会消耗对应账号的额度，只发几条短消息。选一个便宜的模型：
 E2E_CLI='Claude Code' E2E_CLI_ID=claude E2E_MODEL='Haiku 5.5' node e2e/real-cli.mjs

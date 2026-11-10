@@ -1,7 +1,7 @@
 /**
- * Validate the JSON the 变更 panel posts and run the git operation it names. Everything
- * arriving here is untrusted: the directory must be absolute, and every file path must stay
- * inside the repository.
+ * Validate the JSON the 变更 panel and the 新建 Worktree dialog post, and run the git operation
+ * it names. Everything arriving here is untrusted: the directory must be absolute, and every
+ * file path must stay inside the repository.
  * @module dsh-ccgui/git/git-requests
  */
 
@@ -11,6 +11,8 @@ import type { DiffSide } from './git-read.ts'
 import { GitError } from './git-run.ts'
 import type { Spawn } from './git-run.ts'
 import { checkout, commit, createBranch, discard, pull, push, stage, unstage } from './git-write.ts'
+import { addWorktree, parsePrInput, readWorktreeInfo, readWorktreeOf } from './git-worktree.ts'
+import type { WorktreeRequest } from './git-worktree.ts'
 
 /** A request the panel got wrong; answered with 400 rather than 500. */
 export class GitRequestError extends Error {
@@ -30,6 +32,9 @@ export const GIT_OPERATIONS = [
   'pull',
   'checkout',
   'create-branch',
+  'worktree-info',
+  'worktree-add',
+  'worktree-of',
 ] as const
 
 export type GitOperation = (typeof GIT_OPERATIONS)[number]
@@ -115,6 +120,26 @@ async function write(spawn: Spawn, root: string, operation: GitOperation, body: 
   }
 }
 
+function worktreeRequest(body: Body): WorktreeRequest {
+  const path = text(body, 'path')
+  if (!isAbsolute(path)) throw new GitRequestError('Worktree 位置必须是绝对路径')
+  const branch = text(body, 'branch')
+  switch (body.mode) {
+    case 'new':
+      return { mode: 'new', branch, base: text(body, 'base'), path }
+    case 'existing':
+      return { mode: 'existing', branch, path }
+    case 'pr': {
+      const input = text(body, 'pr')
+      const pr = parsePrInput(input)
+      if (pr === undefined) throw new GitRequestError(`无法识别的 PR：${input}`)
+      return { mode: 'pr', pr, branch, path }
+    }
+    default:
+      throw new GitRequestError('缺少或无效的参数：mode')
+  }
+}
+
 async function diff(spawn: Spawn, root: string, body: Body): Promise<unknown> {
   const path = repoPath(body.path)
   const side = diffSide(body)
@@ -144,6 +169,9 @@ export async function runOperation(spawn: Spawn, operation: GitOperation, body: 
   const root = await repoRoot(spawn, cwd)
   if (root === undefined) return NOT_A_REPO
   if (operation === 'branches') return readBranches(spawn, root)
+  if (operation === 'worktree-info') return readWorktreeInfo(spawn, root)
+  if (operation === 'worktree-of') return readWorktreeOf(spawn, root)
+  if (operation === 'worktree-add') return addWorktree(spawn, root, worktreeRequest(body))
   if (operation === 'diff') return diff(spawn, root, body)
   if (operation !== 'status') await write(spawn, root, operation, body)
   return { repo: true, ...(await readStatus(spawn, root)) }
