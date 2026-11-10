@@ -59,6 +59,8 @@ interface ReviewMock {
   providers: string[]
   /** Models each of those providers advertises, in order. */
   models: Record<string, string[]>
+  /** Providers whose model catalog cannot be read, to exercise the fallback. */
+  failModels: string[]
   /** Requests the plugin forwarded to a stateless route. */
   requests: GenerateOptions[]
 }
@@ -92,7 +94,7 @@ function harness({ homePath = true }: { homePath?: boolean } = {}): Harness {
   const presets = new Map<Context, string>()
   const logs: Message[] = []
   const modelUpdates: string[] = []
-  const review: ReviewMock = { providers: [], models: {}, requests: [] }
+  const review: ReviewMock = { providers: [], models: {}, failModels: [], requests: [] }
   const dshHome = mkdtempSync(join(tmpdir(), 'ccgui-home-'))
   root.logger.exporter({ export: (message) => logs.push(message) })
   root.on('llm/models-updated', (provider) => modelUpdates.push(provider))
@@ -103,7 +105,9 @@ function harness({ homePath = true }: { homePath?: boolean } = {}): Harness {
     },
     listProviders: () => review.providers.map((id) => ({ id, name: id })),
     listModels: (provider: string) =>
-      Promise.resolve((review.models[provider] ?? []).map((id) => ({ provider, id, name: id }))),
+      review.failModels.includes(provider)
+        ? Promise.reject(new Error('catalog unavailable'))
+        : Promise.resolve((review.models[provider] ?? []).map((id) => ({ provider, id, name: id }))),
     stream: (options: GenerateOptions) => {
       review.requests.push(options)
       return (async function* (): AsyncGenerator<StreamChunk> {
@@ -531,6 +535,33 @@ describe('CliBridge auto-review routing', () => {
     const options = request({ purpose: 'auto-review' })
     await collect(onlyAdapter(h).stream(options))
     expect(h.review.requests[0]).toMatchObject({ provider: 'configured', model: 'reviewer' })
+  })
+
+  // A provider whose catalog cannot be read must not sink the whole discovery loop.
+  it('skips a provider whose model catalog cannot be read', async () => {
+    const h = harness()
+    h.review.providers = ['cli-fake', 'broken', 'deepseek']
+    h.review.models = { deepseek: ['deepseek-chat'] }
+    h.review.failModels = ['broken']
+    await start(h)
+    const options = request({ purpose: 'auto-review' })
+    await expect(collect(onlyAdapter(h).stream(options))).resolves.toEqual([REVIEW_FINISH])
+    expect(h.review.requests[0]).toMatchObject({ provider: 'deepseek', model: 'deepseek-chat' })
+    expect(warnings(h).some((text) => text.includes('could not list models for broken'))).toBe(true)
+    expect(h.subprocess.spawned).toEqual([])
+  })
+
+  it('reports a missing route when the configured provider cannot list models', async () => {
+    const h = harness()
+    h.review.failModels = ['configured']
+    await start(h, { reviewProvider: 'configured' })
+    const options = request({ purpose: 'auto-review' })
+    await expect(collect(onlyAdapter(h).stream(options))).rejects.toMatchObject({
+      code: 'UNSUPPORTED_OPTION',
+      message: /审查模型/,
+    })
+    expect(warnings(h).some((text) => text.includes('could not list models for configured'))).toBe(true)
+    expect(h.subprocess.spawned).toEqual([])
   })
 
   it('reports a missing review route instead of sending it to the CLI', async () => {
