@@ -30,6 +30,63 @@ export interface ReleaseNote {
 /** In display order: the first page is the newest release. */
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: '1.0.5',
+    date: '2026-11-09',
+    sections: [
+      {
+        heading: '✨ 新功能',
+        items: [
+          {
+            title: '项目右键新建 Worktree',
+            text: '左侧栏项目右键「新建 Worktree…」，可以从新分支、已有分支或 PR 创建 Git worktree；默认放在仓库同级的 `<仓库名>-worktrees/<分支名>`，创建后加入侧边栏，也可以立刻在里面打开新会话。',
+          },
+          {
+            title: '从 PR 创建不需要 gh',
+            text: '接受 `123`、`#123` 或 PR 链接，从 `refs/pull/<编号>/head` 拉取；有 `upstream` 时优先用它，填链接时按链接里的仓库匹配远程。',
+          },
+          {
+            title: 'worktree 收进仓库分组',
+            text: '侧边栏把 worktree 收进所属仓库的「Worktrees · N」分组，展开状态会记住；右键 worktree 或会话仍是 DSH 自己的菜单。分组依赖侧边栏结构，DSH 改结构时 worktree 退回顶层显示。',
+          },
+          {
+            title: '可以关掉',
+            text: '设置页新增「项目右键新建 Worktree」开关，默认开启。',
+          },
+        ],
+      },
+      {
+        heading: '🐛 问题修复',
+        items: [
+          {
+            title: 'CLI 会话不再显示错误的 token 数字',
+            text: 'ACP 每轮只给一个累计用量，DSH 却按单次请求理解，速度和上下文占用都会被算错。现在不再上报，CLI 会话不显示 tok/s、token 用量和缓存命中。',
+          },
+          {
+            title: 'CLI 启动失败时说明原因',
+            text: '收集 CLI 的 stderr 末尾，失败信息附带最后 800 个字符和退出码；Windows 的无符号退出码同时给出有符号值。npm 的 `Could not read package.json` 会被认成安装不完整，并给出要删除的 `_npx/<hash>` 目录。',
+          },
+        ],
+      },
+      {
+        heading: '📄 文档',
+        items: [
+          {
+            text: 'README 补充 Worktree 的说明，以及 DSH 侧上下文压缩对 CLI 会话不生效的原因和替代做法。',
+          },
+          { text: '版本记录文件统一放到 `docs/release-notes/`。' },
+        ],
+      },
+      {
+        heading: '🔧 维护',
+        items: [
+          {
+            text: '新增 Git worktree 的读取与创建、侧边栏分组和共享的 git POST；删除转发 token 用量的模块，各自带测试和 e2e。',
+          },
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.4',
     date: '2026-11-09',
     sections: [

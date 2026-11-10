@@ -4,5 +4,7 @@ coverage/
 reports/
 .stryker-tmp/
 .ccgui
-docs
+docs/*
+!docs/release-notes/
+!docs/release-notes/**
 .claude/scheduled_tasks.lock
