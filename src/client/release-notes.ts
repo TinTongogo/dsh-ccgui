@@ -80,7 +80,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
         heading: '🔧 维护',
         items: [
           {
-            text: '新增 Git worktree 的读取与创建、侧边栏分组和共享的 git POST；删除转发 token 用量的模块，各自带测试和 e2e。',
+            text: '新增 Git worktree 的读取与创建、侧边栏分组和共享的 git POST；删除转发 token 用量的模块，各自带测试和 e2e。版本号升到 1.0.5。',
           },
         ],
       },
