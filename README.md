@@ -225,6 +225,7 @@ OpenCode（项目的 `opencode.json`）：
 - 不支持 `/compact`、fork、回滚和运行中插话；运行中发的消息会排队到这一轮结束。
 - 只转发文本和你自己写的消息、定时任务；图片和 DSH 写给自己模型的提醒不会发给 CLI。
 - CLI 会话不显示 tok/s、token 用量和缓存命中：ACP 每轮只给一个累计用量，换算不成 DSH 按单次请求统计的口径，显示出来会是错的。上下文用量也不准，CLI 自己管理上下文；窗口按 1000M 申报，是为了让 DSH 的压缩永远不启动。
+- DSH 侧的上下文压缩对 CLI 会话不生效，包括 billion-context 这类插件的自动压缩、压缩提醒和 compress / search_context 等工具。CLI 每轮只收到新发的消息，对话历史存在 CLI 自己那边，DSH 压缩的是一份 CLI 不读的副本，压了也不会让 CLI 发给模型的上下文变小。上下文由 CLI 自己压缩（比如 Claude Code 的自动压缩）。如果想让 CLI 的模型请求经过某个代理，可以在 agent 配置的 `env` 里设置 CLI 认的地址变量，比如 Claude Code 的 `ANTHROPIC_BASE_URL`。
 - 每个打开的会话占一个 CLI 进程，会话关闭或 DSH 退出时才结束。
 
 <details>
