@@ -8,7 +8,7 @@
 import type { Store } from './store.ts'
 
 /** A switchable feature. Additions too small to get in anyone's way are not listed. */
-export type FeatureId = 'filesDefault' | 'gitChanges' | 'compactTabs' | 'terminalEntry' | 'launchScripts'
+export type FeatureId = 'filesDefault' | 'gitChanges' | 'compactTabs' | 'terminalEntry' | 'launchScripts' | 'worktree'
 
 export type FeatureFlags = Readonly<Record<FeatureId, boolean>>
 
@@ -59,6 +59,11 @@ export const FEATURES: readonly FeatureInfo[] = [
     title: '会话顶部的启动脚本',
     description: '在会话标题栏保存并一键运行常用命令。关闭只隐藏入口，已保存的脚本会保留。',
   },
+  {
+    id: 'worktree',
+    title: '项目右键新建 Worktree',
+    description: '在左侧栏项目的右键菜单里新建 Git worktree，并作为新工作区打开。关闭后移除这个菜单项。',
+  },
 ]
 
 /** Everything is on until the user says otherwise; that is why they installed the plugin. */
@@ -68,6 +73,7 @@ export const DEFAULT_FLAGS: FeatureFlags = {
   compactTabs: true,
   terminalEntry: true,
   launchScripts: true,
+  worktree: true,
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

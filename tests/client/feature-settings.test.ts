@@ -36,6 +36,7 @@ describe('FEATURES', () => {
       'compactTabs',
       'terminalEntry',
       'launchScripts',
+      'worktree',
     ])
     expect(Object.values(DEFAULT_FLAGS).every(Boolean)).toBe(true)
     for (const feature of FEATURES) {

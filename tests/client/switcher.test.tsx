@@ -140,7 +140,7 @@ describe('apply', () => {
     ])
   })
 
-  it('defers the terminal entry, the files default, the 变更 page, startup scripts and "添加到对话" until their services are available', () => {
+  it('defers the terminal entry, the files default, the 变更 page, startup scripts, 新建 Worktree and "添加到对话" until their services are available', () => {
     const h = harness()
     // "添加到对话" is not switchable; the others wait on their switches, which start out on.
     expect(h.injected).toEqual([['contextMenus']])
@@ -150,6 +150,7 @@ describe('apply', () => {
       ['sidebarRight'],
       ['sidebarRight', 'sidebarRightTabs'],
       ['sidebarRightTabs', 'slots'],
+      ['contextMenus', 'workspaces', 'sessions', 'uiWorkspace', 'slots'],
       ['sidebarRight', 'webTerminals'],
     ])
     for (const dispose of disposers) dispose()
@@ -164,6 +165,8 @@ describe('apply', () => {
     expect(tag?.textContent).toContain('.dsh-cli-terminal-entry')
     expect(tag?.textContent).toContain('[data-row-key^="session:"]')
     expect(tag?.textContent).toContain('.dsh-ccgui-changes-row')
+    expect(tag?.textContent).toContain('.dsh-wt-dialog')
+    expect(tag?.textContent).toContain('.dsh-wtg-header')
     dispose?.()
     expect(document.head.querySelector('style[data-plugin="dsh-ccgui"]')).toBeNull()
   })

@@ -25,9 +25,32 @@ export interface StdioTransportSpec {
 
 /** How long a closed pipe waits for the exit status before failing without it. */
 const CLOSE_REASON_WAIT_MS = 1_000
+/**
+ * stderr is collected rather than inherited: a CLI that dies before the protocol starts,
+ * such as `npx` on a half-installed cache entry, writes its reason only there, and the
+ * harness's own stderr is nowhere the user looks. The seam keeps the tail of this size.
+ */
+const STDERR_TAIL_BYTES = 4_096
+/** How much of that tail goes into the error shown to the user. */
+const QUOTED_STDERR_CHARS = 800
+/** Windows reports a negative exit code as unsigned; npm and libuv print the signed one. */
+const UNSIGNED_EXIT_FROM = 0x80_00_00_00
+const UNSIGNED_EXIT_RANGE = 0x1_00_00_00_00
 
-function describeExit(outcome: SubprocessOutcome): string {
-  return outcome.signal === null ? `进程退出，退出码 ${outcome.exitCode}` : `进程被信号 ${outcome.signal} 终止`
+function exitCodeText(exitCode: number | null): string {
+  if (exitCode === null || exitCode < UNSIGNED_EXIT_FROM) return String(exitCode)
+  return `${exitCode}（即 ${exitCode - UNSIGNED_EXIT_RANGE}）`
+}
+
+function stderrTail(child: SubprocessHandle): string {
+  const text = child.collected.stderr?.readFrom(0).text.trim() ?? ''
+  return text.length > QUOTED_STDERR_CHARS ? text.slice(-QUOTED_STDERR_CHARS) : text
+}
+
+function describeExit(outcome: SubprocessOutcome, stderr: string): string {
+  const exit =
+    outcome.signal === null ? `进程退出，退出码 ${exitCodeText(outcome.exitCode)}` : `进程被信号 ${outcome.signal} 终止`
+  return stderr === '' ? exit : `${exit}。它退出前的输出：${stderr}`
 }
 
 async function exitsWithin(child: SubprocessHandle, ms: number): Promise<boolean> {
@@ -58,7 +81,7 @@ function closeReason(child: SubprocessHandle): Promise<Error> {
     }, CLOSE_REASON_WAIT_MS).unref()
   })
   const exit = child.done.then(
-    (outcome) => new Error(describeExit(outcome)),
+    (outcome) => new Error(describeExit(outcome, stderrTail(child))),
     (error: unknown) => (error instanceof Error ? error : new Error(String(error))),
   )
   return Promise.race([exit, timeout])
@@ -68,7 +91,7 @@ function spawnChild(spec: StdioTransportSpec): SubprocessHandle {
   const child = spec.spawn({
     argv: spec.argv,
     cwd: spec.cwd,
-    stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'inherit' },
+    stdio: { stdin: 'pipe', stdout: 'pipe', stderr: { maxBytes: STDERR_TAIL_BYTES } },
     graceMs: spec.graceMs,
     env: { ...spec.env },
   })

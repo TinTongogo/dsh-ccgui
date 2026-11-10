@@ -7,7 +7,8 @@
  * session header (see terminal-entry.tsx) saves the trip through the right sidebar, a startup
  * script control beside it (see launch-script-entry.tsx) runs saved commands there,
  * "添加到对话" in file context menus (see add-to-chat.tsx) mentions a path in the composer, and
- * the right sidebar opens on 工作区文件 rather than the guide (see files-default.ts). A settings
+ * the right sidebar opens on 工作区文件 rather than the guide (see files-default.ts), and a
+ * workspace's context menu offers 新建 Worktree… (see worktree/worktree-register.tsx). A settings
  * page in the left sidebar (see settings-register.ts) orders the switcher's providers and hides
  * some (see cli-prefs.ts), and switches the header buttons and the files default off for users
  * who prefer the harness's original interaction.
@@ -51,6 +52,11 @@ import { installCompactTabs } from './compact-tabs.ts'
 import type { FeatureSettings, FeatureStorage } from './feature-settings.ts'
 import { SETTINGS_PAGE_STYLES } from './settings-page.tsx'
 import { gateInject, registerSettingsPage } from './settings-register.ts'
+import { registerWorktree } from './worktree/worktree-register.tsx'
+import type { WorktreeContext } from './worktree/worktree-register.tsx'
+import type { ExpansionStorage } from './worktree/worktree-expansion.ts'
+import { WORKTREE_GROUP_STYLES } from './worktree/worktree-group-styles.ts'
+import { WORKTREE_STYLES } from './worktree/worktree-styles.ts'
 
 interface SwitcherInjected {
   directory: Store<DirectoryState>
@@ -68,7 +74,8 @@ interface ClientContext {
     AddToChatContext['inject'] &
     LaunchScriptContext['inject'] &
     FilesDefaultContext['inject'] &
-    ChangesContext['inject']
+    ChangesContext['inject'] &
+    WorktreeContext['inject']
   slots: {
     inject(name: string, add: () => unknown): void
     register(
@@ -138,7 +145,7 @@ const STYLES = `
 
 // Looked up on each call: touching `localStorage` can throw where storage is blocked, and
 // that should cost the startup scripts, not the plugin's start.
-const BROWSER_STORAGE: ScriptStorage & FeatureStorage & CliPrefsStorage = {
+const BROWSER_STORAGE: ScriptStorage & FeatureStorage & CliPrefsStorage & ExpansionStorage = {
   getItem: (key) => window.localStorage.getItem(key),
   setItem: (key, value) => {
     window.localStorage.setItem(key, value)
@@ -148,7 +155,7 @@ const BROWSER_STORAGE: ScriptStorage & FeatureStorage & CliPrefsStorage = {
 function installStyles(): () => void {
   const tag = document.createElement('style')
   tag.dataset.plugin = 'dsh-ccgui'
-  tag.textContent = `${STYLES}${MODEL_MENU_STYLES}${TERMINAL_ENTRY_STYLES}${LAUNCH_SCRIPT_STYLES}${SESSION_TREE_STYLES}${SESSION_STATUS_STYLES}${SETTINGS_PAGE_STYLES}${CHANGES_STYLES}`
+  tag.textContent = `${STYLES}${MODEL_MENU_STYLES}${TERMINAL_ENTRY_STYLES}${LAUNCH_SCRIPT_STYLES}${SESSION_TREE_STYLES}${SESSION_STATUS_STYLES}${SETTINGS_PAGE_STYLES}${CHANGES_STYLES}${WORKTREE_STYLES}${WORKTREE_GROUP_STYLES}`
   document.head.append(tag)
   return () => {
     tag.remove()
@@ -287,9 +294,14 @@ function registerSwitchableFeatures(ctx: ClientContext, settings: FeatureSetting
   const changes: ChangesContext = {
     inject: gateInject(ctx, settings, 'gitChanges', (deps, apply) => ctx.inject(deps, apply)),
   }
+  const worktree: WorktreeContext = {
+    inject: gateInject(ctx, settings, 'worktree', (deps, apply) => ctx.inject(deps, apply)),
+  }
   registerFilesDefault(files)
   // window.fetch needs its receiver, so it is wrapped rather than passed bare.
-  registerChanges(changes, ctx.sessions.list, (input, init) => window.fetch(input, init))
+  const fetchFn = (input: string, init: RequestInit): Promise<Response> => window.fetch(input, init)
+  registerChanges(changes, ctx.sessions.list, fetchFn)
+  registerWorktree(worktree, fetchFn, BROWSER_STORAGE)
   registerLaunchScripts(scripts, ctx.sessions.list, BROWSER_STORAGE, () => crypto.randomUUID())
   ctx.effect(() => whileEnabled(settings, 'compactTabs', () => installCompactTabs(document)), 'ccgui: compact tabs')
 }

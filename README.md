@@ -103,6 +103,23 @@ CLI 和模型各有一个菜单。模型菜单列出当前 CLI 真实可用的�
   <img alt="启动脚本截图：会话标题栏的脚本菜单，和终端里运行中的 npm run dev" src="./assets/illustrations/05-launch-scripts-light.webp" />
 </picture>
 
+### 新建 Worktree
+
+在左侧栏项目上右键「新建 Worktree…」，可以从新分支、已有分支或 PR 创建 Git worktree。worktree 默认放在仓库同级的 `<仓库名>-worktrees/<分支名>` 下，创建后可以直接在里面打开新会话。
+
+worktree 收在所属项目下面的「Worktrees · N」分组里，展开后每个 worktree 一行，再展开是它的会话。右键 worktree 或会话弹出的是 DSH 自己的菜单，重命名、删除、置顶、归档都照常可用。
+
+<details>
+<summary>细节</summary>
+
+- 新分支从选定的 base 创建，不跟踪 base；base 是远程分支时先 fetch。已有的远程分支会在本地建同名分支并跟踪它。
+- 「从 PR 创建」接受 `123`、`#123` 或 PR 链接，从 GitHub 发布的 `refs/pull/<编号>/head` 拉取，不需要 `gh`。有 `upstream` 远程时优先用它（fork 的 PR 在那里）；填链接时按链接里的仓库匹配远程。
+- 分组按 Git 判断：一个工作区是某个仓库的 worktree、且这个仓库本身也是工作区时，就收进它的分组，在插件之外（比如命令行、CC GUI）建的 worktree 也一样。仓库本身没加成工作区的 worktree 照常显示在顶层。
+- 每个 worktree 仍是一个独立的 DSH 工作区，标题是「仓库名 / 分支名」，输入框上方的工作区名显示的就是它。
+- DSH 的侧边栏没有给工作区留嵌套的扩展点，分组是插件按侧边栏的结构插进去的。DSH 改了侧边栏结构的话，分组会消失，worktree 退回顶层显示，不影响使用。
+
+</details>
+
 ### 文件和终端
 
 「工作区文件」里右键「添加到对话」，把 `@路径` 插到光标处；标题栏的终端按钮一键开关右侧栏终端。
@@ -207,7 +224,8 @@ OpenCode（项目的 `opencode.json`）：
 
 - 不支持 `/compact`、fork、回滚和运行中插话；运行中发的消息会排队到这一轮结束。
 - 只转发文本和你自己写的消息、定时任务；图片和 DSH 写给自己模型的提醒不会发给 CLI。
-- 上下文用量显示不准，因为 CLI 自己管理上下文。
+- CLI 会话不显示 tok/s、token 用量和缓存命中：ACP 每轮只给一个累计用量，换算不成 DSH 按单次请求统计的口径，显示出来会是错的。上下文用量也不准，CLI 自己管理上下文；窗口按 1000M 申报，是为了让 DSH 的压缩永远不启动。
+- DSH 侧的上下文压缩对 CLI 会话不生效，包括 billion-context 这类插件的自动压缩、压缩提醒和 compress / search_context 等工具。CLI 每轮只收到新发的消息，对话历史存在 CLI 自己那边，DSH 压缩的是一份 CLI 不读的副本，压了也不会让 CLI 发给模型的上下文变小。上下文由 CLI 自己压缩（比如 Claude Code 的自动压缩）。如果想让 CLI 的模型请求经过某个代理，可以在 agent 配置的 `env` 里设置 CLI 认的地址变量，比如 Claude Code 的 `ANTHROPIC_BASE_URL`。
 - 每个打开的会话占一个 CLI 进程，会话关闭或 DSH 退出时才结束。
 
 <details>
@@ -238,6 +256,7 @@ CLI 注册为 DSH 的模型提供方，不需要改 agent loop。一轮 CLI 回�
 - 模型列表来自 ACP 的 `configOptions`。它只在会话上报告，所以第一次选中某个 CLI 时插件会开一个临时会话询问，不发消息、不调用模型，清理放在后台。没选过的 CLI 不会被启动。换模型在每轮开始前用 `session/set_config_option`。
 - 写死版本且已缓存的 `npx` 包直接运行；缓存不完整、版本不符、`.npmrc` 改过缓存目录或在 Windows 上时仍交给 `npx`。
 - Windows 上 DSH 不经过命令行启动进程，起不来 `npx`、`codebuddy` 这类 `.cmd` 包装脚本。插件按 `PATH` 和 `PATHEXT` 找到实际文件：`.exe` 直接运行，npm / pnpm 生成的 `.cmd` 读出它要运行的脚本和解释器（`node`，或 OMP CLI 这类包用的 `bun`），直接用解释器启动；解释器本身也是 `.cmd` 时会继续往下找。其他批处理脚本无法这样启动，需要把 `command` 配成 `.exe` 或脚本解释器的完整路径。
+- CLI 在协议开始前就退出时（常见于 `npx` 碰到一个上次没装完的缓存目录，npm 会以退出码 -4058 退出、不再重装），它的 stderr 是唯一写明原因的地方。插件收集 stderr 的末尾，随退出码一起显示；Windows 报出的无符号退出码会附上有符号值。输出里带有 `_npx/<hash>` 路径的安装不完整错误，会提示用户删除那个目录后重试。
 - macOS 上从 Dock 打开的 DSH 只有系统默认的 `PATH`，看不到 nvm、fnm、Volta 装的 node，`npx` 系的 CLI 会以退出码 127 失败。插件启动时在后台向登录 shell 读一次 `PATH`；读到之前或读取失败时，在原 `PATH` 后补上 Homebrew、nvm、Volta、bun 等常见目录。agent 配置的 `env` 里写了 `PATH` 时以配置为准。
 - 权限请求转给 DSH 审批界面。CLI 的会话 ID 存在会话日志里，重启后优先用 `session/resume` 接回。
 - 一条用户消息最多发给 CLI 一次，重发可能让它重复做事，所以重试是关闭的。
@@ -281,6 +300,7 @@ export CHROMIUM_PATH=/path/to/chromium   # Playwright 自带的浏览器版本�
 
 e2e/start-server.sh &             # 另开一个终端也可以
 node e2e/fake-cli.mjs             # 脚本化的假 CLI，结果确定
+node e2e/worktree.mjs             # 项目右键新建 Worktree（新分支、PR、嵌套分组、失败提示）
 
 # 真实 CLI，会消耗对应账号的额度，只发几条短消息。选一个便宜的模型：
 E2E_CLI='Claude Code' E2E_CLI_ID=claude E2E_MODEL='Haiku 5.5' node e2e/real-cli.mjs

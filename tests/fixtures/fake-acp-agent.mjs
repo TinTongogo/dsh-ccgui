@@ -8,7 +8,7 @@
 //   CRASH          exit with code 3
 //   WHICH MODEL    report the selected model
 //   anything else  echo the prompt
-// Every turn reports the same token usage, so the host shows speed and cache hits.
+// Every turn reports the same token usage, as real CLIs do; the plugin does not forward it.
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'

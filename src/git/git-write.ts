@@ -118,7 +118,14 @@ export async function pull(spawn: Spawn, root: string): Promise<void> {
   await mustGit(spawn, root, ['pull', '--ff-only'], { failure: '拉取失败', signal })
 }
 
-async function validBranch(spawn: Spawn, root: string, name: string): Promise<void> {
+/**
+ * Require a name git accepts for a branch, and that cannot pass for an option.
+ * @param spawn - the subprocess service's spawn.
+ * @param root - the repository's top level.
+ * @param name - the branch name.
+ * @throws GitError for an invalid name.
+ */
+export async function validBranch(spawn: Spawn, root: string, name: string): Promise<void> {
   const result = await runGit(spawn, root, ['check-ref-format', '--branch', name])
   if (name.startsWith('-') || result.exitCode !== 0) throw new GitError(`分支名称无效：${name}`)
 }

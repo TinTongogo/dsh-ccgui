@@ -47,6 +47,7 @@ export class FakeSubprocess {
   readonly waitSignals: (AbortSignal | undefined)[] = []
   terminations = 0
   spec: SubprocessSpawnSpec | undefined
+  private stderrText = ''
   private readonly outcome = Promise.withResolvers<SubprocessOutcome>()
   private settled = false
   private waits = 0
@@ -79,7 +80,7 @@ export class FakeSubprocess {
       stdout: this.options.omit === 'stdout' ? undefined : this.stdout,
       stderr: undefined,
       control: undefined,
-      collected: {},
+      collected: { stderr: { readFrom: (fromByte) => this.readStderr(fromByte) } },
       done: this.outcome.promise,
       terminate: () => {
         this.terminations += 1
@@ -87,6 +88,11 @@ export class FakeSubprocess {
       },
       waitForExit: (signal) => this.waitForExit(signal),
     }
+  }
+
+  /** What the child prints on stderr; the seam keeps it readable after the exit. */
+  writeStderr(text: string): void {
+    this.stderrText += text
   }
 
   /** Report the exit through `done`, then close stdout as a real pipe would. */
@@ -102,6 +108,11 @@ export class FakeSubprocess {
     if (this.settled) return
     this.settled = true
     this.outcome.reject(error)
+  }
+
+  private readStderr(fromByte: number) {
+    const text = this.stderrText.slice(fromByte)
+    return { text, nextOffset: fromByte + text.length, lossy: false }
   }
 
   private send(message: object): void {

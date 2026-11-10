@@ -12,11 +12,19 @@ import { fileURLToPath } from 'node:url'
 const INSTALL_HINT = '请确认它已安装并完成登录。'
 const REINSTALL_HINT = '它的安装不完整，请按上面的提示重新安装。'
 
-/** Errors that mean files are missing from the install, not that the CLI itself refused. */
-const INCOMPLETE_INSTALL = /Missing optional dependency|Cannot find module|ERR_MODULE_NOT_FOUND/
+/**
+ * Errors that mean files are missing from the install, not that the CLI itself refused.
+ * `Could not read package.json` is npm's own: npx found an entry whose install never finished
+ * and does not install again until that directory is gone.
+ */
+const INCOMPLETE_INSTALL =
+  /Missing optional dependency|Cannot find module|ERR_MODULE_NOT_FOUND|Could not read package\.json/
 
-/** An npx cache entry, `<npm cache>/_npx/<hash>`, as a path or a `file://` URL. */
-const NPX_ENTRY = /[^\s'"()]*[\\/]_npx[\\/][0-9a-f]+/
+/**
+ * An npx cache entry, `<npm cache>/_npx/<hash>`, as a path or a `file://` URL. A Windows
+ * path is taken from its drive letter so that `Program Files` keeps its space.
+ */
+const NPX_ENTRY = /(?:[A-Za-z]:[\\/](?:[^\\/\n'"()]+[\\/])*?|[^\s'"()]*[\\/])_npx[\\/][0-9a-f]+/
 
 function npxEntry(message: string): string | undefined {
   const found = NPX_ENTRY.exec(message)?.[0]
