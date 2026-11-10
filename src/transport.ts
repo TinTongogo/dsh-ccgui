@@ -33,7 +33,7 @@ export interface SessionInfo {
 /** How a CLI turn ended, as the CLI reported it. */
 export interface PromptOutcome {
   readonly stopReason: StopReason
-  /** Token usage for the turn; many CLIs do not report it. */
+  /** Cumulative token usage for the turn; many CLIs do not report it, and the plugin does not forward it. */
   readonly usage?: Usage | null | undefined
 }
 
