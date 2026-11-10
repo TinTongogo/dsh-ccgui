@@ -27,6 +27,19 @@ describe('startHint', () => {
     expect(hint).not.toContain('_npx')
   })
 
+  // What npm prints when npx finds a cache entry whose install never finished (Windows report).
+  it('names a Windows cache entry with spaces in its path when npm cannot read its package.json', () => {
+    const message = [
+      '进程退出，退出码 4294963238（即 -4058）。它退出前的输出：npm error code ENOENT',
+      'npm error syscall open',
+      'npm error path C:\\Program Files\\nodejs\\node_cache\\_npx\\928bb229ebc08fcf\\package.json',
+      'npm error errno -4058',
+      "npm error enoent Could not read package.json: Error: ENOENT: no such file or directory, open 'C:\\Program Files\\nodejs\\node_cache\\_npx\\928bb229ebc08fcf\\package.json'",
+    ].join('\n')
+    const hint = startHint(message)
+    expect(hint).toContain('请删除 C:\\Program Files\\nodejs\\node_cache\\_npx\\928bb229ebc08fcf 后重试')
+  })
+
   it('keeps the install hint for anything else', () => {
     expect(startHint('spawn opencode ENOENT')).toBe('请确认它已安装并完成登录。')
   })

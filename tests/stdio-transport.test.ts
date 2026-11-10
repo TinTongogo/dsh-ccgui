@@ -34,12 +34,15 @@ function spawnForTest(spec: SubprocessSpawnSpec): SubprocessHandle {
   return {
     stdin: child.stdin,
     stdout: child.stdout,
+    stderr: undefined,
+    control: undefined,
+    collected: {},
     done,
     terminate: () => {
       child.kill('SIGKILL')
     },
     waitForExit,
-  } as unknown as SubprocessHandle
+  }
 }
 
 interface Harness {
@@ -237,7 +240,7 @@ describe('openStdioTransport over a scripted subprocess', () => {
     expect(fake.spec).toEqual({
       argv: ['agent', '--acp'],
       cwd: '/work/project',
-      stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'inherit' },
+      stdio: { stdin: 'pipe', stdout: 'pipe', stderr: { maxBytes: 4096 } },
       graceMs: 200,
       env: { TOKEN: 'secret' },
     })
@@ -299,6 +302,38 @@ describe('openStdioTransport over a scripted subprocess', () => {
     const { closed, fake } = openFake()
     fake.exitWith({ exitCode: 7, signal: null })
     await expect.poll(() => closed.map((error) => error.message)).toEqual(['进程退出，退出码 7'])
+  })
+
+  // From a Windows report: npx found a half-installed cache entry and died before the
+  // protocol began, so stderr is the only place the reason was ever written.
+  it('quotes the end of stderr and the signed exit code when the process dies', async () => {
+    const { transport, closed, fake } = openFake()
+    const started = transport.initialize()
+    fake.writeStderr(
+      [
+        'npm error code ENOENT',
+        'npm error path C:\\Program Files\\nodejs\\node_cache\\_npx\\928bb229ebc08fcf\\package.json',
+        'npm error enoent Could not read package.json',
+      ].join('\n'),
+    )
+    fake.exitWith({ exitCode: 4_294_963_238, signal: null })
+    await expect(started).rejects.toThrow('退出码 4294963238（即 -4058）')
+    const [reason] = closed
+    expect(reason?.message).toContain('npm error code ENOENT')
+    expect(reason?.message).toContain('_npx\\928bb229ebc08fcf')
+  })
+
+  it('keeps only the end of a long stderr and says nothing when it is empty', async () => {
+    const quiet = openFake()
+    quiet.fake.exitWith({ exitCode: 7, signal: null })
+    await expect.poll(() => quiet.closed.map((error) => error.message)).toEqual(['进程退出，退出码 7'])
+    const noisy = openFake()
+    noisy.fake.writeStderr(`${'x'.repeat(2000)}\nlast line`)
+    noisy.fake.exitWith({ exitCode: 1, signal: null })
+    await expect.poll(() => noisy.closed).toHaveLength(1)
+    const [reason] = noisy.closed
+    expect(reason?.message).toContain('last line')
+    expect(reason?.message.length).toBeLessThan(1000)
   })
 
   it('passes a seam failure through unchanged', async () => {
