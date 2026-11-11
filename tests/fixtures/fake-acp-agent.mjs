@@ -168,6 +168,11 @@ function hang(sessionId) {
   })
 }
 
+// What CodeBuddy actually returns for an exhausted free-model quota: a stringified
+// JSON-RPC error on `codebuddy.ai/errorMessage`, plus ids that are not a reason.
+const QUOTA_MESSAGE =
+  '当前您在Hy4模型的免费使用量已超出频率限制，可在2026-11-12 12:21:09重置后使用。您可消耗积分继续使用该模型或切换至其他模型。'
+
 function runPrompt(sessionId, text) {
   if (text.trim() === 'WHICH MODEL') {
     say(sessionId, `model=${currentModel}`)
@@ -226,7 +231,20 @@ async function handleRequest({ id, method, params }) {
     case 'session/prompt': {
       const text = params.prompt.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join(' ')
       const stopReason = await runPrompt(params.sessionId, text)
-      const meta = text.includes('META') ? { _meta: { error: 'Hy4 限时免费模型的额度已用尽' } } : {}
+      const meta = text.includes('META')
+        ? {
+            _meta: {
+              'codebuddy.ai/requestId': '01a1ca7f8cf27b6281cea546289f2394',
+              'codebuddy.ai/traceId': '1d22272f7805058ce6335d06cdd862a7',
+              'codebuddy.ai/finishReason': 'error',
+              'codebuddy.ai/errorMessage': JSON.stringify({
+                code: -32003,
+                message: 'Quota exceeded: Request failed with status code 429',
+                data: { statusCode: 429, code: 6004, category: 'quota', details: QUOTA_MESSAGE },
+              }),
+            },
+          }
+        : {}
       return respond(id, { stopReason, usage: TURN_USAGE, ...meta })
     }
     default:

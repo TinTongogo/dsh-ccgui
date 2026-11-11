@@ -324,12 +324,14 @@ await scenario('model switch mid-session: the next message runs on the new model
 
 // A refusal has no field of its own in ACP. A CLI that explains itself nowhere in the
 // stream must still not leave the user with "未说明原因" when the reason is right there.
-await scenario('refusal: the reason the CLI attached reaches the failure', async () => {
+await scenario('refusal: CodeBuddy’s attached request error reaches the failure', async () => {
   await newCliSession(FAKE)
   await send('REFUSE META')
-  await untilText('Hy4 限时免费模型的额度已用尽')
+  await untilText('可消耗积分继续使用该模型')
   await idle('REFUSE META')
-  if (!(await bodyText()).includes('拒绝继续这个请求')) throw new Error('not reported as a refusal')
+  const body = await bodyText()
+  if (!body.includes('拒绝继续这个请求')) throw new Error('not reported as a refusal')
+  if (body.includes('-32003') || body.includes('requestId')) throw new Error('bookkeeping ids leaked on screen')
 })
 
 await scenario('refusal: the log is quoted when the CLI attached nothing', async () => {

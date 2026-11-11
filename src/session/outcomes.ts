@@ -46,11 +46,73 @@ function failureFinish(message: string, code: string): FinishReason {
   return { kind: 'error', failure: { message, code } }
 }
 
+/** Where a CLI may put its reason on `PromptResponse._meta`, most specific first. */
+const META_REASON_KEYS = [
+  'codebuddy.ai/errorMessage',
+  'errorMessage',
+  'codebuddy.ai/error',
+  'error',
+  'message',
+  'reason',
+] as const
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/** Flatten whitespace without dropping the beginning of a short error. */
+function oneLine(text: string): string {
+  return text.replace(/\s+/g, ' ').trim()
+}
+
+/** Unlike a streamed answer, an error explains itself at the start, so keep its head. */
+function diagnosticLine(text: string): string {
+  const clean = oneLine(text)
+  return clean.length <= REFUSAL_DETAIL_LIMIT ? clean : `${clean.slice(0, REFUSAL_DETAIL_LIMIT)}…`
+}
+
+/** Every sentence a stringified JSON-RPC error may carry; a CLI often has more than one. */
+function errorResponseReasons(parsed: Record<string, unknown>): string[] {
+  const data = isRecord(parsed.data) ? parsed.data : {}
+  const error = isRecord(parsed.error) ? parsed.error : {}
+  return [parsed.message, data.details, data.message, data.reason, error.message].filter(
+    (field): field is string => typeof field === 'string' && field.trim() !== '',
+  )
+}
+
+/** Prefer the sentence that explains over an English template such as "Request failed: 429". */
+function bestReason(candidates: string[]): string {
+  const chinese = candidates.filter((line) => /[\u4e00-\u9fff]/.test(line))
+  const pool = chinese.length > 0 ? chinese : candidates
+  return pool.reduce((best, line) => (line.length > best.length ? line : best), '')
+}
+
+/** CodeBuddy stringifies its request error into `_meta`; other CLIs attach a plain sentence. */
+function unpackReason(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  const clean = value.trim()
+  if (!clean.startsWith('{')) return oneLine(clean)
+  try {
+    const parsed: unknown = JSON.parse(clean)
+    if (!isRecord(parsed)) return oneLine(clean)
+    const reasons = errorResponseReasons(parsed)
+    return reasons.length === 0 ? oneLine(clean) : oneLine(bestReason(reasons))
+  } catch {
+    return oneLine(clean)
+  }
+}
+
 /** A CLI's own words for why it stopped, when it attached them instead of streaming text. */
 function attachedReason(meta: Readonly<Record<string, unknown>> | null | undefined): string {
-  if (meta === null || meta === undefined) return ''
-  const named = [meta.error, meta.message, meta.reason].find((field) => typeof field === 'string')
-  return refusalDetail(typeof named === 'string' ? named : JSON.stringify(meta))
+  if (meta == null) return ''
+  for (const key of META_REASON_KEYS) {
+    const reason = unpackReason(meta[key])
+    if (reason !== '') return diagnosticLine(reason)
+  }
+  // Unknown shape: show it, but leave out the ids a CLI adds to every answer.
+  const readable = Object.fromEntries(
+    Object.entries(meta).filter(([key]) => !/requestId|traceId|finishReason/i.test(key)),
+  )
+  return Object.keys(readable).length === 0 ? '' : diagnosticLine(JSON.stringify(readable))
 }
 
 /** The last few lines a CLI wrote to stderr, which is the only place some of them explain. */

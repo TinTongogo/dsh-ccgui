@@ -128,6 +128,43 @@ describe('turnDiagnostics', () => {
     expect(turnDiagnostics({ reason: '被内容策略拒绝' }, '')).toBe('被内容策略拒绝')
   })
 
+  // CodeBuddy refuses a free-model quota with `stopReason: refusal` and no streamed text.
+  // Its reason is a stringified JSON-RPC error under `_meta["codebuddy.ai/errorMessage"]`,
+  // surrounded by bookkeeping ids that must not end up on screen.
+  const CODEBUDDY_QUOTA =
+    '当前您在Hy4模型的免费使用量已超出频率限制，可在2026-11-12 12:21:09重置后使用。您可消耗积分继续使用该模型或切换至其他模型。'
+  const codebuddyMeta = (details: string) => ({
+    'codebuddy.ai/requestId': '01a1ca7f8cf27b6281cea546289f2394',
+    'codebuddy.ai/traceId': '1d22272f7805058ce6335d06cdd862a7',
+    'codebuddy.ai/finishReason': 'error',
+    'codebuddy.ai/errorMessage': JSON.stringify({
+      code: -32003,
+      message: 'Quota exceeded: Request failed with status code 429',
+      data: { statusCode: 429, code: 6004, category: 'quota', details },
+    }),
+  })
+
+  it('reads CodeBuddy’s stringified request error and drops its bookkeeping ids', () => {
+    const detail = turnDiagnostics(codebuddyMeta(CODEBUDDY_QUOTA), '')
+    expect(detail).toBe(CODEBUDDY_QUOTA)
+    expect(detail).not.toMatch(/requestId|traceId|-32003|statusCode/)
+  })
+
+  it('prefers the explaining sentence over an English template', () => {
+    expect(turnDiagnostics(codebuddyMeta('额度已用尽，请切换模型'), '')).toBe('额度已用尽，请切换模型')
+  })
+
+  it('still reads a plain errorMessage attached by another CLI', () => {
+    expect(turnDiagnostics({ errorMessage: '模型不可用' }, '')).toBe('模型不可用')
+    expect(turnDiagnostics({ 'codebuddy.ai/error': '内容策略拒绝' }, '')).toBe('内容策略拒绝')
+  })
+
+  it('falls through to the log when the answer only carries ids', () => {
+    const ids = { 'codebuddy.ai/requestId': 'abc', 'codebuddy.ai/traceId': 'def' }
+    expect(turnDiagnostics(ids, 'quota exceeded for hy4-free')).toBe('quota exceeded for hy4-free')
+    expect(turnDiagnostics(ids, '')).toBe('')
+  })
+
   it('keeps an answer it does not recognise instead of dropping it', () => {
     expect(turnDiagnostics({ code: 'QUOTA_EXCEEDED', retryAfter: 30 }, '')).toBe(
       '{"code":"QUOTA_EXCEEDED","retryAfter":30}',
