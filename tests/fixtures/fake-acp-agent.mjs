@@ -179,9 +179,16 @@ function runPrompt(sessionId, text) {
     return 'end_turn'
   }
   if (text.trim().startsWith('REFUSE')) {
-    // Real CLIs refuse without streaming a word: one writes the reason to stderr, the
-    // other attaches it to the response. Neither is visible as assistant text.
-    if (!text.includes('META')) process.stderr.write('codebuddy: quota exceeded for hy4-free\n')
+    // Real CLIs refuse without streaming a word. Three shapes: the reason on stderr,
+    // the reason attached as a stringified request error, and a telemetry dump with
+    // no reason at all (which must fall back to the plain failure, not to the dump).
+    if (text.includes('NOISE')) {
+      process.stderr.write(
+        `${JSON.stringify({ traceparent: '00-78d02baf', 'codebuddy.ai/outcome': 'FAILED_MODEL_REQUEST' })}\n`,
+      )
+    } else if (!text.includes('META')) {
+      process.stderr.write('codebuddy: quota exceeded for hy4-free\n')
+    }
     return 'refusal'
   }
   if (text.trim() === 'WHICH MODE') {
@@ -231,20 +238,29 @@ async function handleRequest({ id, method, params }) {
     case 'session/prompt': {
       const text = params.prompt.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join(' ')
       const stopReason = await runPrompt(params.sessionId, text)
-      const meta = text.includes('META')
+      const meta = text.includes('NOISE')
         ? {
             _meta: {
-              'codebuddy.ai/requestId': '01a1ca7f8cf27b6281cea546289f2394',
-              'codebuddy.ai/traceId': '1d22272f7805058ce6335d06cdd862a7',
-              'codebuddy.ai/finishReason': 'error',
-              'codebuddy.ai/errorMessage': JSON.stringify({
-                code: -32003,
-                message: 'Quota exceeded: Request failed with status code 429',
-                data: { statusCode: 429, code: 6004, category: 'quota', details: QUOTA_MESSAGE },
-              }),
+              traceparent: '00-78d02baf9da0044cd66da266d8900326-6c51ee98c30947fc-01',
+              baggage: 'codebuddy.session_id=01a1ca7f-8949-71d1-ba52-df0cdb8298f3',
+              'codebuddy.ai/traceparent': '00-78d02baf9da0044cd66da266d8900326',
+              'codebuddy.ai/outcome': 'FAILED_MODEL_REQUEST',
             },
           }
-        : {}
+        : text.includes('META')
+          ? {
+              _meta: {
+                'codebuddy.ai/requestId': '01a1ca7f8cf27b6281cea546289f2394',
+                'codebuddy.ai/traceId': '1d22272f7805058ce6335d06cdd862a7',
+                'codebuddy.ai/finishReason': 'error',
+                'codebuddy.ai/errorMessage': JSON.stringify({
+                  code: -32003,
+                  message: 'Quota exceeded: Request failed with status code 429',
+                  data: { statusCode: 429, code: 6004, category: 'quota', details: QUOTA_MESSAGE },
+                }),
+              },
+            }
+          : {}
       return respond(id, { stopReason, usage: TURN_USAGE, ...meta })
     }
     default:

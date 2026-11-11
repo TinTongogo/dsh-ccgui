@@ -340,6 +340,18 @@ await scenario('refusal: the log is quoted when the CLI attached nothing', async
   await idle('REFUSE', 2)
 })
 
+// A wall of _meta JSON is worse than the plain failure. When neither the answer
+// nor the log has a human sentence, the user must see "未说明原因" again.
+await scenario('refusal: a telemetry dump falls back to the plain failure', async () => {
+  await send('REFUSE NOISE')
+  await untilText('未说明原因')
+  await idle('REFUSE NOISE')
+  const body = await bodyText()
+  if (body.includes('traceparent') || body.includes('FAILED_MODEL_REQUEST')) {
+    throw new Error('diagnostic dump leaked onto the screen')
+  }
+})
+
 await scenario('locked: a started session keeps its CLI, and says how to change', async () => {
   if (!(await cliSwitcher().isDisabled())) throw new Error('switcher still enabled after the session started')
   const title = await cliSwitcher().getAttribute('title')

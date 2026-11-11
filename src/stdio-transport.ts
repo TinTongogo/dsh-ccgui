@@ -47,6 +47,39 @@ function stderrTail(child: SubprocessHandle): string {
   return text.length > QUOTED_STDERR_CHARS ? text.slice(-QUOTED_STDERR_CHARS) : text
 }
 
+/**
+ * stderr belongs to a turn, not to the process. A tail read when one prompt ends
+ * must not quote what an earlier turn left behind — that would explain a refusal
+ * with somebody else's log line. Offsets are owned here, so the batch read used
+ * for an exit reason stays independent.
+ */
+interface TurnStderr {
+  /** Start a turn: everything written before it is no longer this turn's evidence. */
+  mark(): void
+  /** @returns what the CLI wrote during this turn. */
+  take(): string
+}
+
+function turnStderr(child: SubprocessHandle): TurnStderr {
+  const read = child.collected.stderr
+  let offset = 0
+  const advance = (): string => {
+    if (read === undefined) return ''
+    const { text, nextOffset } = read.readFrom(offset)
+    offset = nextOffset
+    return text.trim()
+  }
+  return {
+    mark: () => {
+      advance()
+    },
+    take: () => {
+      const text = advance()
+      return text.length > QUOTED_STDERR_CHARS ? text.slice(-QUOTED_STDERR_CHARS) : text
+    },
+  }
+}
+
 function describeExit(outcome: SubprocessOutcome, stderr: string): string {
   const exit =
     outcome.signal === null ? `进程退出，退出码 ${exitCodeText(outcome.exitCode)}` : `进程被信号 ${outcome.signal} 终止`
@@ -160,7 +193,7 @@ function connectAgent(child: SubprocessHandle, handlers: TransportHandlers) {
 function sessionOperations(
   agent: ReturnType<typeof connectAgent>,
   untilClosed: UntilClosed,
-  readStderr: () => string,
+  turnLog: TurnStderr,
 ): Omit<AcpTransport, 'initialize' | 'dispose'> {
   const { session } = methods.agent
   return {
@@ -186,12 +219,14 @@ function sessionOperations(
       await untilClosed(agent.request(session.close, { sessionId }))
     },
     prompt: async (sessionId, blocks) => {
+      turnLog.mark()
       const answer = await untilClosed(agent.request(session.prompt, { sessionId, prompt: [...blocks] }))
       const { stopReason, usage, _meta } = answer
-      // Read the tail now: this is the moment the CLI stopped explaining itself, and the
-      // process may be replaced before anyone looks at the failure. Nothing is added when
-      // there is nothing to add, so a plain turn keeps its plain outcome.
-      const stderr = readStderr()
+      // Read this turn only: the process may be replaced before anyone looks at
+      // the failure, and a previous turn's log is no explanation for this one.
+      // Nothing is added when there is nothing to add, so a plain turn keeps its
+      // plain outcome.
+      const stderr = turnLog.take()
       return {
         stopReason,
         usage,
@@ -231,7 +266,7 @@ export function openStdioTransport(spec: StdioTransportSpec, handlers: Transport
           clientCapabilities: {},
         }),
       ),
-    ...sessionOperations(agent, untilClosed, () => stderrTail(child)),
+    ...sessionOperations(agent, untilClosed, turnStderr(child)),
     dispose: (force = false) => {
       if (force) child.terminate()
       return (disposal ??= stopChild(child, spec.eofGraceMs))

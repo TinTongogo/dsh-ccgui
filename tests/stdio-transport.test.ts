@@ -246,6 +246,26 @@ function openFake(options: FakeSubprocessOptions = {}): Harness & { readonly fak
 const settle = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 describe('openStdioTransport over a scripted subprocess', () => {
+  // A refusal must be explained by this turn's log, not by a line a previous turn
+  // left in the process-wide stderr tail.
+  it('quotes only what the CLI wrote during this turn', async () => {
+    const { transport, cwd, fake } = openFake({ exitOnEof: true })
+    await transport.initialize()
+    const { sessionId } = await transport.newSession(cwd)
+
+    // Written before the turn starts: it belongs to no turn and must be dropped.
+    fake.writeStderr('start-up noise\n')
+    const first = transport.prompt(sessionId, text('hello'))
+    fake.writeStderr('first turn: quota exceeded\n')
+    expect((await first).stderr).toBe('first turn: quota exceeded')
+
+    const second = transport.prompt(sessionId, text('hello'))
+    fake.writeStderr('second turn: nothing useful\n')
+    expect((await second).stderr).toBe('second turn: nothing useful')
+
+    await transport.dispose()
+  })
+
   it('asks the seam for piped protocol streams and the CLI environment', () => {
     const { fake } = openFake({ exitOnEof: true })
     expect(fake.spec).toEqual({

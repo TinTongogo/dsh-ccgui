@@ -165,10 +165,24 @@ describe('turnDiagnostics', () => {
     expect(turnDiagnostics(ids, '')).toBe('')
   })
 
-  it('keeps an answer it does not recognise instead of dropping it', () => {
-    expect(turnDiagnostics({ code: 'QUOTA_EXCEEDED', retryAfter: 30 }, '')).toBe(
-      '{"code":"QUOTA_EXCEEDED","retryAfter":30}',
-    )
+  // A diagnostic dump is worse than "未说明原因": show the plain failure rather than
+  // a wall of _meta JSON, trace headers or JSON log lines.
+  it('never shows a structural payload when no named reason is present', () => {
+    const dump = {
+      traceparent: '00-78d02baf9da0044cd66da266d8900326-6c51ee98c30947fc-01',
+      baggage: 'codebuddy.session_id=01a1ca7f-8949-71d1-ba52-df0cdb8298f3',
+      'codebuddy.ai/traceparent': '00-78d02baf9da0044cd66da266d8900326',
+      'codebuddy.ai/outcome': 'FAILED_MODEL_REQUEST',
+    }
+    expect(turnDiagnostics(dump, '')).toBe('')
+    expect(turnDiagnostics({ code: 'QUOTA_EXCEEDED', retryAfter: 30 }, '')).toBe('')
+    expect(turnDiagnostics({ 'codebuddy.ai/errorMessage': '{"traceparent":"00-abc"}' }, '')).toBe('')
+    expect(turnDiagnostics(undefined, '{"code":6004,"category":"quota"}\n')).toBe('')
+  })
+
+  it('keeps a readable log line next to an unreadable one', () => {
+    const log = '{"code":6004,"category":"quota"}\ncodebuddy: quota exceeded for hy4-free\n'
+    expect(turnDiagnostics(undefined, log)).toBe('codebuddy: quota exceeded for hy4-free')
   })
 
   it('reads the last lines of the log when the answer carries nothing', () => {

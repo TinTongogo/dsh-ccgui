@@ -101,18 +101,28 @@ function unpackReason(value: unknown): string {
   }
 }
 
+/**
+ * A reason is only worth showing if it reads like a sentence. A diagnostic dump —
+ * the `_meta` object itself, a trace header, a JSON log line — is worse than the
+ * plain "未说明原因" failure, so it must never reach the user.
+ */
+function isReadableReason(text: string): boolean {
+  const clean = text.trim()
+  if (clean === '') return false
+  return (
+    !/^[{[]/.test(clean) &&
+    !/"(?:code|statusCode|category|traceparent|baggage|outcome|codebuddy\.ai\/[\w-]+)"\s*:/.test(clean)
+  )
+}
+
 /** A CLI's own words for why it stopped, when it attached them instead of streaming text. */
 function attachedReason(meta: Readonly<Record<string, unknown>> | null | undefined): string {
   if (meta == null) return ''
   for (const key of META_REASON_KEYS) {
     const reason = unpackReason(meta[key])
-    if (reason !== '') return diagnosticLine(reason)
+    if (isReadableReason(reason)) return diagnosticLine(reason)
   }
-  // Unknown shape: show it, but leave out the ids a CLI adds to every answer.
-  const readable = Object.fromEntries(
-    Object.entries(meta).filter(([key]) => !/requestId|traceId|finishReason/i.test(key)),
-  )
-  return Object.keys(readable).length === 0 ? '' : diagnosticLine(JSON.stringify(readable))
+  return ''
 }
 
 /** The last few lines a CLI wrote to stderr, which is the only place some of them explain. */
@@ -120,8 +130,8 @@ function logTail(stderr: string | undefined): string {
   const lines = (stderr ?? '')
     .split('\n')
     .map((line) => line.trim())
-    .filter((line) => line !== '')
-  return refusalDetail(lines.slice(-2).join(' '))
+    .filter((line) => isReadableReason(line))
+  return lines.length === 0 ? '' : diagnosticLine(lines.slice(-2).join(' '))
 }
 
 /**
@@ -135,7 +145,9 @@ export function turnDiagnostics(
   stderr: string | undefined,
 ): string {
   const attached = attachedReason(meta)
-  return attached === '' ? logTail(stderr) : attached
+  const behind = attached === '' ? logTail(stderr) : attached
+  // Last gate: no path may put a diagnostic dump on screen.
+  return isReadableReason(behind) ? behind : ''
 }
 
 /** Collapse a CLI explanation into one line, keeping its tail if it is long. */
