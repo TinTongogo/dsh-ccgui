@@ -82,3 +82,20 @@ export function createModeApi(post: PostJson, sessionId: string): ModeApi {
   }
   return { read: (provider) => send(provider), write: (provider, mode) => send(provider, mode) }
 }
+
+/** One API per session: a control that reads in an effect must not be handed a new object
+ * on every render, or that effect would read again each time round. */
+const perSession = new Map<string, ModeApi>()
+
+/**
+ * @param post - the fetch to post with.
+ * @param sessionId - the harness session whose CLI this control speaks to.
+ * @returns the API for that session, the same object on every call.
+ */
+export function modeApiFor(post: PostJson, sessionId: string): ModeApi {
+  const known = perSession.get(sessionId)
+  if (known !== undefined) return known
+  const created = createModeApi(post, sessionId)
+  perSession.set(sessionId, created)
+  return created
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createModeApi } from '../../src/client/mode-api.ts'
+import { createModeApi, modeApiFor } from '../../src/client/mode-api.ts'
 import type { PostJson } from '../../src/client/mode-api.ts'
 import { MODE_ROUTE_PREFIX } from '../../src/constants.ts'
 
@@ -76,5 +76,20 @@ describe('mode API', () => {
   it('refuses a reply it cannot read', async () => {
     await expect(createModeApi(poster({ success: 'yes' }), 'dsh-1').read('cli-x')).rejects.toThrow('切换 CLI 模式失败')
     await expect(createModeApi(poster(null), 'dsh-1').read('cli-x')).rejects.toThrow('模式接口')
+  })
+
+  // A control reads in an effect, so a fresh object per render would make it read again
+  // each time round: the same session must be handed the same API.
+  it('hands the same session the same API', async () => {
+    const post = poster({ success: true, data: { modes: MODES, pending: null } })
+    const first = modeApiFor(post, 'dsh-2')
+    expect(modeApiFor(post, 'dsh-2')).toBe(first)
+    await first.read('cli-x')
+    expect(sent(post).body).toEqual({ sessionId: 'dsh-2', provider: 'cli-x' })
+  })
+
+  it('keeps sessions apart', () => {
+    const post = poster({ success: true, data: { modes: MODES, pending: null } })
+    expect(modeApiFor(post, 'dsh-3')).not.toBe(modeApiFor(post, 'dsh-4'))
   })
 })
