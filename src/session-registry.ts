@@ -11,6 +11,7 @@ import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import type { CliSession, PermissionAsk } from './cli-session.ts'
 import { CLI_TOOL_NAME, cliRoute, DEFAULT_MODEL_ID } from './constants.ts'
+import type { CliModeList } from './model-options.ts'
 import type { PtcWrap } from './session/ptc-call.ts'
 import type { ToolOutcome } from './tool-record.ts'
 
@@ -33,6 +34,8 @@ export interface SessionStart {
   readonly sentMessageIds: ReadonlySet<string>
   /** Settles once the previous process has stopped. */
   readonly after: Promise<void>
+  /** A native mode picked before this session existed, for the same CLI. */
+  readonly initialMode?: string
 }
 
 /** The harness facilities the registry uses. */
@@ -74,6 +77,8 @@ export class CliSessionRegistry {
   private sessions: ReadonlyMap<string, LiveSession> = new Map()
   private stopping: ReadonlyMap<string, Promise<void>> = new Map()
   private turnMessages: ReadonlyMap<string, ReadonlySet<string>> = new Map()
+  /** Native modes picked while their session had no CLI yet, by harness session. */
+  private pickedModes: ReadonlyMap<string, { readonly provider: string; readonly mode: string }> = new Map()
 
   constructor(
     agents: readonly CliAgentConfig[],
@@ -165,6 +170,51 @@ export class CliSessionRegistry {
   }
 
   /**
+   * Read the native modes a CLI reported for a session. A live CLI's own answer wins: it
+   * may have changed mode during a turn, after the catalog last heard from it, and only it
+   * knows whether a pick is still on its way.
+   * @param sessionId - the harness session.
+   * @param provider - the CLI route the menu is showing.
+   * @returns the modes in the CLI's own ids and names, and a pick the CLI has not confirmed.
+   */
+  modeStateFor(sessionId: string, provider: string): { readonly modes?: CliModeList; readonly pending?: string } {
+    const live = this.sessions.get(sessionId)
+    if (live?.provider === provider) {
+      const { modes, pendingMode } = live.session
+      return {
+        ...(modes === undefined ? {} : { modes }),
+        ...(pendingMode === undefined ? {} : { pending: pendingMode }),
+      }
+    }
+    const picked = this.pickedModes.get(sessionId)
+    return picked?.provider === provider ? { pending: picked.mode } : {}
+  }
+
+  /**
+   * Switch a session to one of its CLI's own modes, by the id that CLI reported. A pick
+   * made before the CLI started is kept and sent with its first step, and is what a
+   * replacement session starts on.
+   * @param sessionId - the harness session.
+   * @param provider - the CLI route the menu is showing.
+   * @param mode - the mode id, unchanged.
+   * @returns the modes as the CLI reports them, or undefined while there is no CLI to ask.
+   * @throws when the route is not a configured CLI, or the CLI refuses the change.
+   */
+  async switchMode(sessionId: string, provider: string, mode: string): Promise<CliModeList | undefined> {
+    if (!this.agentsByProvider.has(provider)) throw new LlmError(`未知的 CLI 路由：${provider}`, 'CLI_MODE_FAILED')
+    this.pickedModes = new Map([...this.pickedModes, [sessionId, { provider, mode }]])
+    const live = this.sessions.get(sessionId)
+    if (live?.provider !== provider) return undefined
+    try {
+      return await live.session.switchMode(mode)
+    } catch (error: unknown) {
+      // The CLI refused the change, so the pick must not resurface with a later step.
+      this.pickedModes = without(this.pickedModes, sessionId)
+      throw error
+    }
+  }
+
+  /**
    * Decide whether a step's tool calls go out wrapped in `run_code`.
    * @param provider - the requested CLI route.
    * @param sessionId - the harness session.
@@ -200,6 +250,7 @@ export class CliSessionRegistry {
     const session = this.deps.createSession(config, sessionId, cwd, {
       sentMessageIds: current?.session.sentMessageIds ?? NO_MESSAGES,
       after: this.stopping.get(sessionId) ?? Promise.resolve(),
+      ...this.startMode(sessionId, provider),
     })
     this.sessions = new Map([...this.sessions, [sessionId, { provider, session }]])
     return session
@@ -227,6 +278,7 @@ export class CliSessionRegistry {
    */
   disposeSession(sessionId: string): void {
     this.turnMessages = without(this.turnMessages, sessionId)
+    this.pickedModes = without(this.pickedModes, sessionId)
     this.stopSession(sessionId)
   }
 
@@ -243,6 +295,12 @@ export class CliSessionRegistry {
 
   private noticeSelection(provider: unknown): void {
     if (typeof provider === 'string' && this.agentsByProvider.has(provider)) this.deps.onCliSelected(provider)
+  }
+
+  /** A mode picked before the CLI started, if it was picked for this route. */
+  private startMode(sessionId: string, provider: string): { initialMode?: string } {
+    const picked = this.pickedModes.get(sessionId)
+    return picked?.provider === provider ? { initialMode: picked.mode } : {}
   }
 
   private recordTurnMessage(sessionId: string, id: unknown): void {

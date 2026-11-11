@@ -31,6 +31,11 @@ export interface CliSessionOptions {
   /** What this CLI reported about its models when asked ahead of any session. */
   readonly knownModels?: () => CliModelList | undefined
   /**
+   * A native mode the user picked before this session existed. Sent with the first step,
+   * since there is no CLI session to change before then.
+   */
+  readonly initialMode?: string
+  /**
    * Told the reasoning levels of each model the CLI reported, undefined for none. Held until
    * the CLI's turn ends: the harness checks the level on every step against the catalog.
    */

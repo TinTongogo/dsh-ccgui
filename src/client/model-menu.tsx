@@ -4,7 +4,8 @@
  * The composer's model control, in place of the harness's seat. That seat lists every
  * provider, CLIs included, for every session; this one lists only what the session can move
  * to (see menu-models.ts): a CLI's own models on a CLI, the harness's providers anywhere
- * else, with the reasoning level beside it (see effort-menu.tsx).
+ * else, with the reasoning level beside it (see effort-menu.tsx) and, for a CLI that
+ * reports them, that CLI's own modes (see mode-menu.tsx).
  * @module dsh-ccgui/client/model-menu
  */
 
@@ -20,6 +21,8 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { DirectorySelection, DirectoryState } from './choices.ts'
 import { EffortMenu } from './effort-menu.tsx'
+import type { ModeApi } from './mode-api.ts'
+import { ModeMenu } from './mode-menu.tsx'
 import { menuModels } from './menu-models.ts'
 import type { MenuModels } from './menu-models.ts'
 import { ModelCard } from './model-card.tsx'
@@ -39,6 +42,8 @@ export interface ModelMenuInjected {
   directory: Store<DirectoryState>
   load: () => void
   select: SelectModel
+  /** Reads and switches the CLI's own modes; absent where the harness offers no route. */
+  modes?: ModeApi
   session: Store<{ removed?: boolean }> | undefined
 }
 
@@ -159,7 +164,14 @@ function useRemoved(session: ModelMenuInjected['session']): boolean {
  * @param props - what the slot injected.
  * @returns the trigger, the level beside it and, while open, the list.
  */
-export function CliModelMenu({ available, directory, load, select, session }: ModelMenuInjected): ReactElement | null {
+export function CliModelMenu({
+  available,
+  directory,
+  load,
+  select,
+  modes,
+  session,
+}: ModelMenuInjected): ReactElement | null {
   const state = useStore(directory)
   const locked = useRemoved(session)
   if (!available) return null
@@ -169,6 +181,7 @@ export function CliModelMenu({ available, directory, load, select, session }: Mo
     <div className={GROUP_CLASS}>
       <ModelSeat models={models} pending={pending} locked={locked} load={load} select={select} />
       <EffortMenu models={models} pending={pending} locked={locked} select={select} />
+      <ModeMenu provider={models.current?.provider} api={modes} locked={locked} />
     </div>
   )
 }

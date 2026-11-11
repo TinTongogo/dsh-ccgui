@@ -25,7 +25,8 @@ import { createCliTool } from './cli-tool.ts'
 import { CLI_TOOL_NAME, cliRoute } from './constants.ts'
 import { ModelCacheFile } from './model-cache.ts'
 import { CliModelCatalog } from './model-catalog.ts'
-import type { CliModelList } from './model-options.ts'
+import type { CliModeList, CliModelList } from './model-options.ts'
+import { registerModeRoute } from './mode-routes.ts'
 import type { ImageRef } from './prompt-images.ts'
 import { probeModels } from './model-probe.ts'
 import { npxCacheDir, startFromNpxCache } from './npx-cache.ts'
@@ -157,7 +158,7 @@ export default class CliBridge extends Service {
     this.restoreModels(modelCache)
     this.registerRoutes()
     this.followSessions()
-    this.serveGit()
+    this.serveWebRoutes()
   }
 
   /** Read in the background: the menu works without it, and fills in once it arrives. */
@@ -180,10 +181,11 @@ export default class CliBridge extends Service {
   }
 
   /**
-   * The 变更 panel's git routes. Taken as optional dependencies: a harness without a web
-   * server (a headless run) still gets the CLIs, just not the panel's backend.
+   * The 变更 panel's git routes and the composer's mode route. Taken as optional
+   * dependencies: a harness without a web server (a headless run) still gets the CLIs,
+   * just not the panel's backend.
    */
-  private serveGit(): void {
+  private serveWebRoutes(): void {
     this.ctx.inject(['webServer', 'connection'], (child) => {
       const handler = gitHandler(
         (spec) => child.subprocess.spawn(spec),
@@ -191,7 +193,30 @@ export default class CliBridge extends Service {
         (message) => child.logger.warn(message),
       )
       child.effect(() => registerGitRoutes(child.webServer, handler), 'ccgui: git routes')
+      child.effect(
+        () =>
+          registerModeRoute(
+            child.webServer,
+            {
+              modeState: (sessionId, provider) => this.modeState(sessionId, provider),
+              switchMode: (sessionId, provider, mode) => this.registry.switchMode(sessionId, provider, mode),
+            },
+            child.connection,
+            (message) => child.logger.warn(message),
+          ),
+        'ccgui: mode route',
+      )
     })
+  }
+
+  /**
+   * The native modes to show for a session. A live CLI's own report wins; before it starts,
+   * the catalog's last answer for that route fills in.
+   */
+  private modeState(sessionId: string, provider: string): { modes?: CliModeList; pending?: string } {
+    const { modes, pending } = this.registry.modeStateFor(sessionId, provider)
+    const known = modes ?? this.catalog.modesFor(provider)
+    return { ...(known === undefined ? {} : { modes: known }), ...(pending === undefined ? {} : { pending }) }
   }
 
   private registerRoutes(): void {
@@ -378,6 +403,7 @@ export default class CliBridge extends Service {
       cancelGraceMs: this.config.cancelGraceMs,
       startTimeoutMs: this.config.startTimeoutMs,
       knownModels: () => this.catalog.known(provider),
+      ...(start.initialMode === undefined ? {} : { initialMode: start.initialMode }),
       onEfforts: (model, effort) => this.catalog.learnEfforts(provider, model, effort),
       onModes: (modes) => this.catalog.learnModes(provider, modes),
       readImage: (ref, signal) => this.readImage(ref, signal),

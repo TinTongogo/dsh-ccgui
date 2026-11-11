@@ -26,6 +26,7 @@ import type { DirectorySelection, DirectoryState } from './choices.ts'
 import { ProviderMark } from './marks.tsx'
 import { CliModelMenu } from './model-menu.tsx'
 import { MODEL_MENU_STYLES } from './model-menu-styles.ts'
+import { createModeApi } from './mode-api.ts'
 import {
   SESSION_STATUS_SLOT,
   SESSION_STATUS_STYLES,
@@ -333,6 +334,8 @@ export function apply(ctx: ClientContext): void {
         order: MODEL_MENU_ORDER,
         inject: (sessionId) => ({
           ...directoryFace(ctx, sessionId),
+          // window.fetch needs its receiver, so it is wrapped rather than passed bare.
+          modes: createModeApi((input, init) => window.fetch(input, init), sessionId),
           available: ctx.sessions.subagentAddress(sessionId) === undefined,
         }),
       },

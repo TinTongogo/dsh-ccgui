@@ -2,6 +2,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import type * as Os from 'node:os'
 import { delimiter, join } from 'node:path'
+import { Readable } from 'node:stream'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Message } from '@deepseek-ai/cordis'
@@ -779,6 +781,62 @@ describe('CliBridge in PTC mode', () => {
     const stream = onlyAdapter(h).stream(request({ messages: [user('m1', 'hello')] }))
     await expect(collect(stream)).rejects.toMatchObject({ code: 'CLI_WRONG_PRESET' })
     expect(h.subprocess.spawned).toEqual([])
+  })
+})
+
+describe('CliBridge mode route', () => {
+  interface Route {
+    readonly kind: string
+    readonly path: string
+    handler(req: IncomingMessage, res: ServerResponse): Promise<void>
+  }
+
+  function requestOf(body: unknown): IncomingMessage {
+    return Object.assign(Readable.from([Buffer.from(JSON.stringify(body))]), {
+      method: 'POST',
+      headers: {},
+      url: '/dsh-ccgui/modes',
+    }) as unknown as IncomingMessage
+  }
+
+  function responseOf(): { res: ServerResponse; answer: () => Record<string, unknown> } {
+    let body = ''
+    const res = {
+      writeHead: () => undefined,
+      end: (chunk?: string) => {
+        body = chunk ?? ''
+      },
+    } as unknown as ServerResponse
+    return { res, answer: () => JSON.parse(body) as Record<string, unknown> }
+  }
+
+  it('serves the CLI mode route beside the git routes, and answers for a CLI with no modes yet', async () => {
+    const h = harness()
+    const routes: Route[] = []
+    const dispose = vi.fn()
+    const fiber = await load(h)
+    h.root.provide('webServer', {
+      register: (route: Route) => {
+        routes.push(route)
+        return dispose
+      },
+    })
+    h.root.provide('connection', { requestRejection: () => undefined })
+    await vi.waitFor(() => {
+      expect(routes.map((route) => route.path)).toEqual(['/dsh-ccgui/git', '/dsh-ccgui/modes'])
+    })
+    const modes = routes[1] as Route
+
+    const read = responseOf()
+    await modes.handler(requestOf({ sessionId: 'dsh-1', provider: 'cli-fake' }), read.res)
+    expect(read.answer()).toEqual({ success: true, data: { modes: null, pending: null } })
+
+    const write = responseOf()
+    await modes.handler(requestOf({ sessionId: 'dsh-1', provider: 'cli-fake', mode: 'plan' }), write.res)
+    expect(write.answer()).toEqual({ success: true, data: { modes: null, pending: 'plan' } })
+
+    await fiber.dispose()
+    expect(dispose).toHaveBeenCalled()
   })
 })
 

@@ -23,6 +23,7 @@ export const HINT_CLASS = 'dsh-cli-model-hint'
 export const HEADING_CLASS = 'dsh-cli-model-heading'
 export const GROUP_CLASS = 'dsh-cli-model-group'
 export const EFFORT_CLASS = 'dsh-cli-model-effort'
+export const MODE_CLASS = 'dsh-cli-model-mode'
 
 // The first rule hides the harness's seat, which renders right after this control's slot;
 // the anchors set `display: contents` inline, hence `!important`. If the harness changes its
@@ -160,5 +161,8 @@ export const MODEL_MENU_STYLES = `
 /* Where the composer is too narrow for the model's name, the level gives way as well. */
 .${EFFORT_CLASS} { display: var(--dsh-composer-model-text-display, block); flex: 0 0 auto; }
 .${EFFORT_CLASS} .${TRIGGER_CLASS} { padding: 0 4px; color: var(--dsw-alias-label-caption); }
+/* The CLI's own mode sits beside the level, read the same way so neither outranks the name. */
+.${MODE_CLASS} { display: var(--dsh-composer-model-text-display, block); flex: 0 0 auto; }
+.${MODE_CLASS} .${TRIGGER_CLASS} { padding: 0 4px; color: var(--dsw-alias-label-caption); }
 .${HINT_CLASS} { padding: 8px; color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 18px; }
 `

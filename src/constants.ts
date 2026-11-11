@@ -25,3 +25,9 @@ export const DEFAULT_MODEL_ID = 'default'
 
 /** Path prefix of the 变更 panel's git routes; the browser posts to `<prefix>/<operation>`. */
 export const GIT_ROUTE_PREFIX = '/dsh-ccgui/git'
+
+/**
+ * The route the composer's mode control posts to. It only lists the modes a CLI reported
+ * and sends the chosen id back to that CLI, unchanged.
+ */
+export const MODE_ROUTE_PREFIX = '/dsh-ccgui/modes'
