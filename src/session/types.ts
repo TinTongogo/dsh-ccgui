@@ -5,7 +5,7 @@
  */
 
 import type { RequestMessage } from '@deepseek-ai/dsh-llm'
-import type { CliEffortList, CliModelList } from '../model-options.ts'
+import type { CliEffortList, CliModeList, CliModelList } from '../model-options.ts'
 import type { ReadImage } from '../prompt-images.ts'
 import type { AcpTransport, TransportHandlers } from '../transport.ts'
 import type { PtcWrap } from './ptc-call.ts'
@@ -35,6 +35,11 @@ export interface CliSessionOptions {
    * the CLI's turn ends: the harness checks the level on every step against the catalog.
    */
   readonly onEfforts?: (model: string, effort: CliEffortList | undefined) => void
+  /**
+   * Told the native modes the CLI reported, in the CLI's own ids and names. Kept per
+   * provider so switching CLIs never carries one CLI's modes over to another.
+   */
+  readonly onModes?: (modes: CliModeList) => void
   /** Reads pasted images from the harness; absent when it has no attachment service. */
   readonly readImage?: ReadImage
   /** Receives failures that have no caller left to reject. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionConfigOption } from '@agentclientprotocol/sdk'
-import { readEffortList, readModelList } from '../src/model-options.ts'
+import { readEffortList, readModeList, readModelList } from '../src/model-options.ts'
 
 const select = (fields: object): SessionConfigOption => ({
   id: 'model',
@@ -257,5 +257,78 @@ describe('readModelList with thought levels', () => {
 
   it('leaves levels out for a CLI that offers none', () => {
     expect(readModelList([select({ category: 'model' })])).not.toHaveProperty('efforts')
+  })
+})
+
+// A CLI's modes are its own vocabulary. Nothing here renames an id or folds it into a
+// harness preset: switching sends these values back to the CLI unchanged.
+describe('readModeList', () => {
+  const modes = select({
+    id: 'permission_mode',
+    name: 'Permission mode',
+    category: 'mode',
+    currentValue: 'acceptEdits',
+    options: [
+      { value: 'default', name: 'Default' },
+      { value: 'acceptEdits', name: 'Accept edits' },
+      { value: 'plan', name: 'Plan' },
+    ],
+  })
+
+  const expected = {
+    configId: 'permission_mode',
+    current: 'acceptEdits',
+    options: [
+      { value: 'default', name: 'Default' },
+      { value: 'acceptEdits', name: 'Accept edits' },
+      { value: 'plan', name: 'Plan' },
+    ],
+  }
+
+  it('keeps the CLI ids, names and current value verbatim', () => {
+    expect(readModeList([select({ category: 'model' }), modes])).toEqual(expected)
+  })
+
+  it('attaches the modes to the model list without changing the models', () => {
+    expect(readModelList([select({ category: 'model' }), modes])).toEqual({
+      configId: 'model',
+      current: 'a',
+      options: [
+        { value: 'a', name: 'A' },
+        { value: 'b', name: 'B' },
+      ],
+      modes: expected,
+    })
+  })
+
+  it('finds modes by category, never by an id that merely looks like one', () => {
+    expect(readModeList([select({ id: 'mode' })])).toBeUndefined()
+  })
+
+  it('returns undefined when the CLI reports no modes', () => {
+    expect(readModeList([select({ category: 'model' })])).toBeUndefined()
+    expect(readModeList([])).toBeUndefined()
+    expect(readModeList(undefined)).toBeUndefined()
+  })
+
+  it('does not mistake models or thought levels for modes', () => {
+    expect(readModeList([select({ category: 'model' }), select({ category: 'thought_level' })])).toBeUndefined()
+  })
+
+  it('drops duplicate mode ids but keeps the first of each', () => {
+    const duplicated = select({
+      category: 'mode',
+      currentValue: 'plan',
+      options: [
+        { value: 'plan', name: 'Plan' },
+        { value: 'plan', name: 'Plan again' },
+      ],
+    })
+    expect(readModeList([duplicated])?.options).toEqual([{ value: 'plan', name: 'Plan' }])
+  })
+
+  it('ignores a mode option with no usable id or current value', () => {
+    expect(readModeList([select({ category: 'mode', id: 5 })])).toBeUndefined()
+    expect(readModeList([select({ category: 'mode', currentValue: '' })])).toBeUndefined()
   })
 })

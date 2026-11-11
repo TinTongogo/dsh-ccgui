@@ -224,8 +224,8 @@ OpenCode（项目的 `opencode.json`）：
 ## 已知限制
 
 - 不支持 `/compact`、fork、回滚和运行中插话；运行中发的消息会排队到这一轮结束。
-- 「完全权限」和「自动审查」下，CLI 发出的 ACP 权限请求自动放行，不再每次弹授权；其它权限预设仍照常询问。
-- 「EXP 自动审查」（`/permission auto`）的 reviewer 请求会转给一个非 CLI 的 stateless 模型路由，不会进入 CLI 会话历史。默认自动挑第一个非 CLI 提供方及其首个模型，也可以在插件配置里用 `reviewProvider` / `reviewModel` 指定（见 `cordis.patch.yml` 的 `config`）；宿主没有任何非 CLI 模型时，会在开工前提示改用其它预设。
+- CLI 会话按 **CLI 自己的原生模式**运行，DSH 的权限预设（`/permission`）只用于 DSH 自己的模型路由，两套互不转换。插件按 CLI 维度读取并缓存它通过 ACP `category: "mode"` 报告的模式集合，option id 与名字原样保留；CLI 何时发权限请求由它自己的模式决定，插件只把请求转发给 DSH 审批卡片，不代为放行。README 开头「审批与停止」表里的 auto / 手动模式就是各 CLI 自己的模式，配置和版本不同结果也可能不同。
+- 「EXP 自动审查」的 reviewer 请求仍会转给一个非 CLI 的 stateless 模型路由，不会进入 CLI 会话历史。默认自动挑第一个非 CLI 提供方及其首个模型，也可以用插件配置里的 `reviewProvider` / `reviewModel` 指定；宿主没有任何非 CLI 模型时，该组合会提示改用其它预设。这是请求路由的技术兼容，不代表 CLI 会话改用 DSH 权限预设。
 - 只转发文本和你自己写的消息、定时任务；图片和 DSH 写给自己模型的提醒不会发给 CLI。
 - CLI 会话不显示 tok/s、token 用量和缓存命中：ACP 每轮只给一个累计用量，换算不成 DSH 按单次请求统计的口径，显示出来会是错的。上下文用量也不准，CLI 自己管理上下文；窗口按 1000M 申报，是为了让 DSH 的压缩永远不启动。
 - DSH 侧的上下文压缩对 CLI 会话不生效，包括 billion-context 这类插件的自动压缩、压缩提醒和 compress / search_context 等工具。CLI 每轮只收到新发的消息，对话历史存在 CLI 自己那边，DSH 压缩的是一份 CLI 不读的副本，压了也不会让 CLI 发给模型的上下文变小。上下文由 CLI 自己压缩（比如 Claude Code 的自动压缩）。如果想让 CLI 的模型请求经过某个代理，可以在 agent 配置的 `env` 里设置 CLI 认的地址变量，比如 Claude Code 的 `ANTHROPIC_BASE_URL`。

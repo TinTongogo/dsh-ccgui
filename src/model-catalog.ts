@@ -11,7 +11,7 @@ import type { LlmModelInfo, LlmModelReasoningInfo } from '@deepseek-ai/dsh-llm'
 import { DEFAULT_MODEL_ID } from './constants.ts'
 import { learnEfforts, reasoningFor } from './model-efforts.ts'
 import { olderVersions } from './model-versions.ts'
-import type { CliEffortList, CliModelList, CliModelOption } from './model-options.ts'
+import type { CliEffortList, CliModeList, CliModelList, CliModelOption } from './model-options.ts'
 
 /** What the catalog needs from the bridge. */
 export interface ModelCatalogDeps {
@@ -156,6 +156,32 @@ export class CliModelCatalog {
    */
   known(provider: string): CliModelList | undefined {
     return this.lists.get(provider)
+  }
+
+  /**
+   * The CLI's own modes, kept per route. Each CLI has a different set and different ids;
+   * callers must send those ids back unchanged rather than translating them into any
+   * harness preset.
+   * @param provider - a CLI route.
+   * @returns its native modes, or undefined before the CLI has answered.
+   */
+  modesFor(provider: string): CliModeList | undefined {
+    return this.lists.get(provider)?.modes
+  }
+
+  /**
+   * Record the native modes a CLI reported for its own route. Only that route's list
+   * changes: another CLI keeps its own modes, and no id is translated.
+   * @param provider - a CLI route.
+   * @param modes - the modes in the CLI's own ids and names.
+   */
+  learnModes(provider: string, modes: CliModeList): void {
+    const list = this.lists.get(provider)
+    // Without a model list there is nowhere to keep them; the probe brings both.
+    if (list === undefined || JSON.stringify(list.modes) === JSON.stringify(modes)) return
+    this.lists = new Map([...this.lists, [provider, { ...list, modes }]])
+    this.persist()
+    this.deps.onUpdated(provider)
   }
 
   /**

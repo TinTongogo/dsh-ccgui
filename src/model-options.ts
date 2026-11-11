@@ -1,6 +1,7 @@
 /**
- * Reads a CLI's model list, and the reasoning levels of its active model, out of the
- * configuration options ACP reports.
+ * Reads a CLI's model list, its reasoning levels, and the native modes it reports, out of
+ * the configuration options ACP sends. Every option id and name stays exactly as the CLI
+ * gave it; nothing here maps a CLI concept onto a harness one.
  * @module dsh-ccgui/model-options
  */
 
@@ -23,12 +24,25 @@ export interface CliEffortList {
   readonly options: readonly CliModelOption[]
 }
 
+/**
+ * A CLI's own modes, exactly as it reports them. The set belongs to the CLI, not to the
+ * harness: each route keeps its own list and its own current value.
+ */
+export interface CliModeList {
+  /** Option id to send when changing the mode; ACP does not fix this name. */
+  readonly configId: string
+  readonly current: string
+  readonly options: readonly CliModelOption[]
+}
+
 /** The models a CLI offers and which one is active. */
 export interface CliModelList {
   /** Option id to send when switching; ACP does not fix this name. */
   readonly configId: string
   readonly current: string
   readonly options: readonly CliModelOption[]
+  /** The CLI's native modes, in the CLI's own ids and names. Absent when it reports none. */
+  readonly modes?: CliModeList
   /**
    * Reasoning levels by model id, for the models seen so far: `null` for a model seen to
    * offer none. Absent when no model has been seen with levels.
@@ -43,6 +57,7 @@ interface ReadEntry extends CliModelOption {
 
 const CONVENTIONAL_MODEL_OPTION_ID = 'model'
 const MODEL_CATEGORY = 'model'
+const MODE_CATEGORY = 'mode'
 const EFFORT_CATEGORY = 'thought_level'
 /** Joins a model name and the detail that distinguishes it. */
 const NAME_SEPARATOR = ' · '
@@ -125,13 +140,27 @@ export function readEffortList(configOptions: ConfigOptions): CliEffortList | un
 }
 
 /**
+ * Find the CLI's native mode option. Only ACP's category identifies it: the ids differ
+ * between CLIs, and a CLI may report no modes at all. The values are kept verbatim so
+ * switching sends back an id the CLI itself understands.
+ * @param configOptions - the options a CLI reported, if any.
+ * @returns its modes, or undefined when it reports none.
+ */
+export function readModeList(configOptions: ConfigOptions): CliModeList | undefined {
+  const option = selectsOf(configOptions).find((candidate) => candidate.category === MODE_CATEGORY)
+  if (option === undefined || !isText(option.id) || !isText(option.currentValue)) return undefined
+  const options = uniqueOptions(flattenEntries(option.options).flatMap(readLevel))
+  return options.length === 0 ? undefined : { configId: option.id, current: option.currentValue, options }
+}
+
+/**
  * Find the model option. ACP marks it with a category, so that wins; the id is only
  * a convention, for CLIs that report no category. The SDK does not validate responses,
  * so everything here is checked: an empty name or id in the catalog would make the
  * harness drop the whole CLI from its menus.
  * @param configOptions - the options a CLI reported, if any.
- * @returns the model list, with the active model's reasoning levels when it has any, or
- * undefined when the CLI offers no selectable models.
+ * @returns the model list, with the CLI's native modes and the active model's reasoning
+ * levels when it has any, or undefined when the CLI offers no selectable models.
  */
 export function readModelList(configOptions: ConfigOptions): CliModelList | undefined {
   const selects = selectsOf(configOptions)
@@ -142,6 +171,13 @@ export function readModelList(configOptions: ConfigOptions): CliModelList | unde
   const options = distinguishNames(flattenEntries(option.options).flatMap(readEntry))
   if (options.length === 0) return undefined
   const effort = readEffortList(configOptions)
-  const list = { configId: option.id, current: option.currentValue, options }
-  return effort === undefined ? list : { ...list, efforts: { [option.currentValue]: effort } }
+  const modes = readModeList(configOptions)
+  const list: CliModelList = {
+    configId: option.id,
+    current: option.currentValue,
+    options,
+    ...(modes === undefined ? {} : { modes }),
+    ...(effort === undefined ? {} : { efforts: { [option.currentValue]: effort } }),
+  }
+  return list
 }

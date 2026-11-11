@@ -18,7 +18,7 @@ import { LlmError } from '@deepseek-ai/dsh-llm'
 import type { RequestMessage, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { abortable } from './abortable.ts'
 import { AsyncQueue } from './async-queue.ts'
-import { readEffortList, readModelList } from './model-options.ts'
+import { readEffortList, readModeList, readModelList } from './model-options.ts'
 import type { CliEffortList } from './model-options.ts'
 import { nativeReplayState, readNativeSession, unseenUserInput } from './request-input.ts'
 import type { UserInput } from './request-input.ts'
@@ -272,6 +272,8 @@ export class CliSession {
   /** Every report of the CLI's options passes through the model state, and lands here. */
   private noteOptions(options: ConfigOptions): void {
     this.effort.observe(options)
+    const modes = readModeList(options)
+    if (modes !== undefined) this.options.onModes?.(modes)
     const model = readModelList(options)?.current
     if (model !== undefined) this.heldEfforts = new Map([...this.heldEfforts, [model, readEffortList(options)]])
   }

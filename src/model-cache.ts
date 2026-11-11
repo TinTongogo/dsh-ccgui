@@ -8,7 +8,7 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import type { CliEffortList, CliModelList, CliModelOption } from './model-options.ts'
+import type { CliEffortList, CliModeList, CliModelList, CliModelOption } from './model-options.ts'
 
 /** Bumped when the layout changes; a file of another version is ignored, not misread. */
 const CACHE_VERSION = 1
@@ -48,11 +48,22 @@ function readEfforts(value: unknown): Readonly<Record<string, CliEffortList | nu
   return entries.length === 0 ? undefined : Object.fromEntries(entries)
 }
 
+/** A CLI's native modes are kept verbatim; a bad entry loses the modes, not the list. */
+function readModes(value: unknown): CliModeList | undefined {
+  const read = readOptions(value)
+  return read === undefined ? undefined : { configId: read.configId, current: read.current, options: read.options }
+}
+
 function readList(value: unknown): CliModelList | undefined {
   const list = readOptions(value)
   if (list === undefined || !isObject(value)) return undefined
   const efforts = readEfforts(value.efforts)
-  return efforts === undefined ? list : { ...list, efforts }
+  const modes = readModes(value.modes)
+  return {
+    ...list,
+    ...(efforts === undefined ? {} : { efforts }),
+    ...(modes === undefined ? {} : { modes }),
+  }
 }
 
 function parseJson(text: string): unknown {

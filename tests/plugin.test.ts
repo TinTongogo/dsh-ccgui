@@ -575,34 +575,15 @@ describe('CliBridge auto-review routing', () => {
     expect(h.subprocess.spawned).toEqual([])
   })
 
-  it('refuses Auto at the start of a turn when no review route exists', async () => {
-    const h = harness()
-    await start(h)
-    addAgent(h)
-    emitSessionEvent(h, 'dsh-1', { type: 'permission/preset', data: { preset: 'auto' } })
-    openTurn(h, 'dsh-1', ['m1'])
-    const turn = collect(onlyAdapter(h).stream(request({ messages: [user('m1', 'hello')] })))
-    await expect(turn).rejects.toMatchObject({ code: 'CLI_WRONG_PRESET' })
-    expect(h.subprocess.spawned).toEqual([])
-  })
-
-  it('runs a CLI turn under Auto once a review route exists', async () => {
+  // A harness permission preset is not a CLI mode: the CLI still starts and runs its
+  // own turn, and its native modes decide whether it asks for permission at all.
+  it.each(['auto', 'danger-full-access'])('runs a CLI turn after a %s preset event', async (preset) => {
     const h = harness()
     h.review.providers = ['deepseek']
     h.review.models = { deepseek: ['deepseek-chat'] }
     await start(h)
     addAgent(h)
-    emitSessionEvent(h, 'dsh-1', { type: 'permission/preset', data: { preset: 'auto' } })
-    openTurn(h, 'dsh-1', ['m1'])
-    await expect(collect(onlyAdapter(h).stream(request({ messages: [user('m1', 'hello')] })))).resolves.toBeDefined()
-    expect(h.subprocess.spawned).toHaveLength(1)
-  })
-
-  it('runs a CLI turn under full access without a review route', async () => {
-    const h = harness()
-    await start(h)
-    addAgent(h)
-    emitSessionEvent(h, 'dsh-1', { type: 'permission/preset', data: { preset: 'danger-full-access' } })
+    emitSessionEvent(h, 'dsh-1', { type: 'permission/preset', data: { preset } })
     openTurn(h, 'dsh-1', ['m1'])
     await expect(collect(onlyAdapter(h).stream(request({ messages: [user('m1', 'hello')] })))).resolves.toBeDefined()
     expect(h.subprocess.spawned).toHaveLength(1)

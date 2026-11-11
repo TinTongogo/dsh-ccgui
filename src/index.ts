@@ -142,7 +142,6 @@ export default class CliBridge extends Service {
       ask: (agent, request, signal) => this.ask(agent, request, signal),
       warn: (message) => ctx.logger.warn(message),
       onCliSelected: (provider) => this.catalog.ensureListed(provider),
-      hasReviewRoute: () => this.hasReviewRoute(),
       createSession: (agent, sessionId, cwd, start) => this.createSession(agent, sessionId, cwd, start),
     })
     const modelCache = new ModelCacheFile(this.homePath(PLUGIN_HOME, MODEL_CACHE_FILE))
@@ -225,11 +224,6 @@ export default class CliBridge extends Service {
       .listProviders()
       .map(({ id }) => id)
       .filter((id) => !this.registry.isCliRoute(id))
-  }
-
-  /** Synchronous gate used before a CLI starts: is there anywhere to review? */
-  private hasReviewRoute(): boolean {
-    return this.config.reviewProvider !== '' || this.nonCliProviders().length > 0
   }
 
   private async firstModel(provider: string): Promise<string | undefined> {
@@ -385,6 +379,7 @@ export default class CliBridge extends Service {
       startTimeoutMs: this.config.startTimeoutMs,
       knownModels: () => this.catalog.known(provider),
       onEfforts: (model, effort) => this.catalog.learnEfforts(provider, model, effort),
+      onModes: (modes) => this.catalog.learnModes(provider, modes),
       readImage: (ref, signal) => this.readImage(ref, signal),
       onError: (error) => this.ctx.logger.warn(`ccgui: ${agent.name}: ${String(error)}`),
       openTransport: (handlers) => this.openTransport(agent, cwd, handlers),
