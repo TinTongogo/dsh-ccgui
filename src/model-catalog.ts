@@ -25,9 +25,9 @@ export interface ModelCatalogDeps {
 }
 
 /**
- * The menu shows the CLI's description as small print beside the name, so names stay
- * exactly as the CLI gave them. It usually carries the usage cost multiplier, which the
- * user needs before picking a model.
+ * The menu keeps a CLI's compact usage-cost label as small print beside the name, so names
+ * stay exactly as the CLI gave them. Longer prose about a model is left out of the row;
+ * the catalog still carries it for the harness.
  */
 function modelInfo(provider: string, option: CliModelOption): LlmModelInfo {
   return {

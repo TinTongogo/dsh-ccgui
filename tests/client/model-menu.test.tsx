@@ -175,6 +175,25 @@ describe('CliModelMenu opening and closing', () => {
     expect(document.querySelectorAll(`.${ROW_DESCRIPTION_CLASS}`)).toHaveLength(0)
   })
 
+  // Providers also send sentences selling a model's strengths. Truncating one into a row
+  // leaves an unreadable fragment beside the name, so the menu leaves prose out entirely.
+  it.each([
+    'Stronger agentic coding, knowledge work and long-horizon tasks',
+    'Built for the most demanding agentic workflows',
+    'Fastest for quick answers',
+    '',
+  ])('leaves a prose description off the row: %j', async (description) => {
+    const described = [
+      { id: 'flash', name: 'DeepSeek-V4.1-Flash' },
+      { id: 'pro', name: 'DeepSeek-V4-Pro', description },
+    ]
+    const { user } = setup(directoryState(described, 'flash'))
+    await user.click(trigger())
+    expect(rowNames()).toEqual(['DeepSeek-V4.1-Flash', 'DeepSeek-V4-Pro'])
+    expect(document.querySelectorAll(`.${ROW_DESCRIPTION_CLASS}`)).toHaveLength(0)
+    if (description !== '') expect(screen.queryByText(description)).toBeNull()
+  })
+
   it('closes when the trigger is pressed again, keeping focus on it', async () => {
     const { user } = setup()
     await user.click(trigger())

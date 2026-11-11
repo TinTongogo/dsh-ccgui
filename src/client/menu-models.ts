@@ -30,7 +30,7 @@ export interface MenuRow {
   readonly provider: string
   readonly model: string
   readonly name: string
-  /** Small print shown beside the name, e.g. a CLI's usage cost multiplier. */
+  /** Compact label shown beside the name, e.g. a CLI's usage cost multiplier; prose is left out. */
   readonly description?: string
   readonly reasoning?: DirectoryReasoning
 }

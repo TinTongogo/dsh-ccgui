@@ -87,8 +87,8 @@ function readEntry(entry: unknown): readonly ReadEntry[] {
 /**
  * A CLI can list several models under one name, CodeBuddy's free and paid tiers of Hy4
  * among them, which would leave rows nobody can tell apart. Names stay exactly as the CLI
- * gave them: the menu shows each description beside its name, and differing descriptions
- * are what tell those rows apart. Only when descriptions cannot do that do the ids join
+ * gave them: the menu shows each compact usage-cost label beside its name, and differing
+ * labels are what tell those rows apart. Only when labels cannot do that do the ids join
  * the name. The default entry's description already names the model it stands for, so it
  * is not repeated beside the name.
  */
