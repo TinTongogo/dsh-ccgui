@@ -66,4 +66,31 @@ describe('MarkGlyph', () => {
     const svg = render(<MarkGlyph id="kimi" size={14} />).container.querySelector('svg')
     expect(svg?.getAttribute('data-cli-mark')).toBe('kimi')
   })
+
+  it.each([
+    // [mark, how it is painted]
+    ['hunyuan', '#0055E9'],
+    ['zhipu', '#3859FF'],
+    ['minimax', 'url(#'],
+    ['stepfun', 'currentColor'],
+    ['xiaomi', '#FF6900'],
+    ['unknown', 'currentColor'],
+  ] as const)('draws the %s model mark', (id, paint) => {
+    const svg = render(<MarkGlyph id={id} size={14} />).container.querySelector('svg')
+    expect(svg?.getAttribute('data-cli-mark')).toBe(id)
+    expect(svg?.querySelectorAll('path').length).toBeGreaterThan(0)
+    expect(svg?.outerHTML).toContain(paint)
+  })
+
+  it('gives every MiniMax mark its own gradient', () => {
+    const { container } = render(
+      <>
+        <MarkGlyph id="minimax" size={14} />
+        <MarkGlyph id="minimax" size={14} />
+      </>,
+    )
+    const ids = Array.from(container.querySelectorAll('linearGradient'), (node) => node.id)
+    expect(ids).toHaveLength(2)
+    expect(new Set(ids).size).toBe(2)
+  })
 })

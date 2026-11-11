@@ -36,13 +36,18 @@ const MANY_MODELS = [
 
 type SelectResult = Awaited<ReturnType<ModelMenuInjected['select']>>
 
-function directoryState(models = FEW_MODELS, current = 'default', pending?: DirectorySelection): DirectoryState {
+function directoryState(
+  models = FEW_MODELS,
+  current = 'default',
+  pending?: DirectorySelection,
+  provider = PROVIDER,
+): DirectoryState {
   return {
     groups: [
-      { id: PROVIDER, name: 'Fake CLI', models },
+      { id: provider, name: 'Fake CLI', models },
       { id: 'deepseek-official', name: 'DeepSeek', models: [{ id: 'deepseek-chat', name: 'DeepSeek Chat' }] },
     ],
-    current: { provider: PROVIDER, model: current },
+    current: { provider, model: current },
     pending: pending ?? null,
   }
 }
@@ -255,7 +260,7 @@ describe('CliModelMenu keyboard', () => {
 })
 
 describe('CliModelMenu search', () => {
-  it("puts each model's vendor mark beside it, keeping a blank slot where none is known", async () => {
+  it("puts each model's maker beside it and a neutral glyph where the maker is unknown", async () => {
     const models = [
       { id: 'deepseek-v4', name: 'DeepSeek V4' },
       { id: 'k3', name: 'K3' },
@@ -264,8 +269,26 @@ describe('CliModelMenu search', () => {
     const { user } = setup(directoryState(models, 'k3'))
     await user.click(trigger())
     const marks = rows().map((row) => row.querySelector('[data-cli-mark]')?.getAttribute('data-cli-mark'))
-    expect(marks).toEqual(['deepseek', 'kimi', undefined])
+    expect(marks).toEqual(['deepseek', 'kimi', 'unknown'])
     expect(rows().every((row) => row.querySelector(`.${ROW_MARK_CLASS}`) !== null)).toBe(true)
+  })
+
+  // The real CodeBuddy list mixes five vendors and one anonymous model. Its own purple
+  // logo must not appear on any row: the logo names the CLI, not the model's maker.
+  it('gives every model in an aggregator list its own maker', async () => {
+    const models = [
+      { id: 'hy4free', name: 'Hy4' },
+      { id: 'glm-5.3', name: 'GLM-5.3' },
+      { id: 'space-bunny', name: 'Space-Bunny' },
+      { id: 'minimax-m3.1-flash', name: 'MiniMax-M3.1-Flash' },
+      { id: 'step-5-preview', name: 'Step-5-Preview' },
+      { id: 'mimo-v2.6-pro', name: 'Xiaomi MiMo-V2.6-Pro' },
+    ]
+    const { user } = setup(directoryState(models, 'hy4free', undefined, 'cli-codebuddy'))
+    await user.click(trigger())
+    const marks = rows().map((row) => row.querySelector('[data-cli-mark]')?.getAttribute('data-cli-mark'))
+    expect(marks).toEqual(['hunyuan', 'zhipu', 'unknown', 'minimax', 'stepfun', 'xiaomi'])
+    expect(marks).not.toContain('codebuddy')
   })
 
   it('offers no search for a short list', async () => {

@@ -260,6 +260,18 @@ await scenario("flat menu: one click shows only this CLI's models, with no secon
   if ((await modelTrigger().getAttribute('aria-expanded')) === 'true') throw new Error('Escape left the menu open')
 })
 
+// A CLI's own logo names the CLI, not the maker of every model it happens to list.
+await scenario('model marks: an unidentifiable model gets a neutral glyph, never a brand', async () => {
+  await modelTrigger().click()
+  await sleep(300)
+  const marks = await page
+    .getByRole('menuitemradio')
+    .evaluateAll((rows) => rows.map((row) => row.querySelector('[data-cli-mark]')?.getAttribute('data-cli-mark')))
+  if (marks.join() !== 'unknown,unknown') throw new Error(`model marks: ${marks.join()}`)
+  await page.keyboard.press('Escape')
+  await sleep(250)
+})
+
 await scenario("flat menu: the harness's control is out of the row", async () => {
   const seats = await harnessSeatDisplays()
   if (!seats.every((display) => display === 'none')) throw new Error(`harness seat: ${seats.join()}`)
