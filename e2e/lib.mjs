@@ -81,9 +81,8 @@ export async function openHarness() {
 
   const cliSwitcher = () => page.getByRole('button', { name: '切换 CLI' })
 
-  /** Start a standard session and put it on a CLI with the composer's switcher. */
-  async function newCliSession(name) {
-    await newSession('标准模式')
+  /** Put the open session on a CLI with the composer's switcher. */
+  async function chooseCli(name) {
     await until(() => cliSwitcher().isVisible(), 'CLI switcher')
     if ((await cliSwitcher().innerText()).trim() === name) return
     await cliSwitcher().click()
@@ -94,6 +93,12 @@ export async function openHarness() {
       .first()
       .click()
     await until(async () => (await cliSwitcher().innerText()).trim() === name, `switcher showing ${name}`)
+  }
+
+  /** Start a standard session and put it on a CLI with the composer's switcher. */
+  async function newCliSession(name) {
+    await newSession('标准模式')
+    await chooseCli(name)
   }
 
   const modelTrigger = () => page.getByRole('button', { name: /^(选择模型|请选择模型)/ }).last()
@@ -206,6 +211,7 @@ export async function openHarness() {
     until,
     newSession,
     newCliSession,
+    chooseCli,
     cliSwitcher,
     modelTrigger,
     modelNames,

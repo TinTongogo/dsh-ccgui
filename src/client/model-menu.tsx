@@ -4,12 +4,11 @@
  * The composer's model control, in place of the harness's seat. That seat lists every
  * provider, CLIs included, for every session; this one lists only what the session can move
  * to (see menu-models.ts): a CLI's own models on a CLI, the harness's providers anywhere
- * else, with the reasoning level beside it (see effort-menu.tsx) and, for a CLI that
- * reports them, that CLI's own modes (see mode-menu.tsx).
+ * else, with the reasoning level beside it (see effort-menu.tsx). The CLI's own modes are
+ * not here: they take the permission seat instead (see mode-seat.tsx).
  * @module dsh-ccgui/client/model-menu
  */
 
-import { useSyncExternalStore } from 'react'
 import type { CSSProperties, ReactElement, MouseEvent as ReactMouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import {
@@ -21,14 +20,14 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { DirectorySelection, DirectoryState } from './choices.ts'
 import { EffortMenu } from './effort-menu.tsx'
-import type { ModeApi } from './mode-api.ts'
-import { ModeMenu } from './mode-menu.tsx'
 import { menuModels } from './menu-models.ts'
 import type { MenuModels } from './menu-models.ts'
 import { ModelCard } from './model-card.tsx'
 import { CHEVRON_CLASS, GROUP_CLASS, ICON_CLASS, LABEL_CLASS, ROOT_CLASS, TRIGGER_CLASS } from './model-menu-styles.ts'
 import { useModelSeat } from './model-seat.ts'
 import type { ModelSeatProps, SelectModel } from './model-seat.ts'
+import type { SessionFacts } from './session-facts.ts'
+import { useRemoved } from './session-facts.ts'
 import { useStore } from './store.ts'
 import type { Store } from './store.ts'
 
@@ -42,9 +41,7 @@ export interface ModelMenuInjected {
   directory: Store<DirectoryState>
   load: () => void
   select: SelectModel
-  /** Reads and switches the CLI's own modes; absent where the harness offers no route. */
-  modes?: ModeApi
-  session: Store<{ blank?: boolean; removed?: boolean }> | undefined
+  session: SessionFacts | undefined
 }
 
 /**
@@ -148,45 +145,14 @@ function ModelSeat(props: ModelSeatProps): ReactElement {
   )
 }
 
-function useRemoved(session: ModelMenuInjected['session']): boolean {
-  return useSyncExternalStore(
-    (listener) =>
-      session?.subscribe(listener) ??
-      (() => {
-        /* no session, nothing to unsubscribe */
-      }),
-    () => session?.getSnapshot().removed === true,
-  )
-}
-
-/** True once the session has a message: before that, its CLI has no process of its own yet. */
-function useStarted(session: ModelMenuInjected['session']): boolean {
-  return useSyncExternalStore(
-    (listener) =>
-      session?.subscribe(listener) ??
-      (() => {
-        /* no session, nothing to unsubscribe */
-      }),
-    () => session?.getSnapshot().blank === false,
-  )
-}
-
 /**
  * Render the control, or nothing for an addressed subagent.
  * @param props - what the slot injected.
- * @returns the trigger, the level beside it and, while open, the list.
+ * @returns the trigger and the level beside it, and while open the list.
  */
-export function CliModelMenu({
-  available,
-  directory,
-  load,
-  select,
-  modes,
-  session,
-}: ModelMenuInjected): ReactElement | null {
+export function CliModelMenu({ available, directory, load, select, session }: ModelMenuInjected): ReactElement | null {
   const state = useStore(directory)
   const locked = useRemoved(session)
-  const started = useStarted(session)
   if (!available) return null
   const models = menuModels(state)
   const pending = state.pending ?? null
@@ -194,7 +160,6 @@ export function CliModelMenu({
     <div className={GROUP_CLASS}>
       <ModelSeat models={models} pending={pending} locked={locked} load={load} select={select} />
       <EffortMenu models={models} pending={pending} locked={locked} select={select} />
-      <ModeMenu provider={models.current?.provider} api={modes} locked={locked} started={started} />
     </div>
   )
 }

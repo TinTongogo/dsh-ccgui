@@ -12,6 +12,7 @@ const {
   until,
   newSession,
   newCliSession,
+  chooseCli,
   cliSwitcher,
   modelTrigger,
   modelNames,
@@ -33,6 +34,34 @@ const harnessSeatDisplays = () =>
     .evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).display))
 // The composer's own control for the CLI's native modes, beside the model and its level.
 const modeTrigger = () => page.getByRole('button', { name: /^CLI 模式，当前/ })
+
+/** Switch the harness's access mode, confirming 完全权限's own risk dialog. */
+async function setAccessMode(name) {
+  await page
+    .getByRole('button', { name: /^访问模式/ })
+    .last()
+    .click()
+  await sleep(400)
+  await page.getByRole('menuitemradio', { name }).or(page.getByRole('menuitem', { name })).first().click()
+  await sleep(600)
+  const confirm = page.getByRole('button', { name: /启用完全权限|确定|确认/ }).first()
+  if (await confirm.isVisible().catch(() => false)) {
+    const box = page.getByRole('checkbox').first()
+    if (await box.isVisible().catch(() => false)) await box.click()
+    await confirm.click()
+    await sleep(600)
+  }
+  await until(
+    async () =>
+      (
+        await page
+          .getByRole('button', { name: /^访问模式/ })
+          .last()
+          .innerText()
+      ).includes(name),
+    `access mode ${name}`,
+  )
+}
 
 // Must stay first, on a fresh server: for `npx` commands, starting a CLI downloads and runs
 // a package, which nobody should get just by opening the app.
@@ -68,6 +97,28 @@ await scenario("seat: a session not on a CLI lists the harness's providers, not 
   await sleep(250)
   if (headings.includes(FAKE) || rows.some((name) => name?.startsWith('Fake')))
     throw new Error(`lists a CLI: ${headings.join()} / ${rows.join()}`)
+  // This session is the harness's own, so the access control keeps the composer's seat
+  // and the CLI's mode control stays out of it.
+  if ((await page.getByRole('button', { name: /^访问模式/ }).count()) === 0) throw new Error('no access control')
+  if ((await page.locator('.dsh-cli-mode-seat').count()) !== 0)
+    throw new Error('a CLI mode control on a harness session')
+})
+
+// The access mode is DSH's stance for sessions it runs. A CLI decides for itself whether to
+// ask, so even 完全权限 must not answer its question with a silent refusal. This runs on the
+// harness session the previous scenario left open: the preset belongs to it, so it cannot
+// follow the suite into later scenarios.
+await scenario('approvals: a 完全权限 session still lets the CLI ask', async () => {
+  await setAccessMode('完全权限')
+  await chooseCli(FAKE)
+  await send('WRITE full.txt')
+  await untilText('等待审批')
+  if (existsSync(inWorkspace('full.txt'))) throw new Error('written before anyone answered')
+  await page.getByRole('button', { name: '允许一次' }).click()
+  await untilText('done')
+  await idle('WRITE full.txt')
+  if (!existsSync(inWorkspace('full.txt'))) throw new Error('missing after approval')
+  await shot('full-access-asked')
 })
 
 await scenario('allow: permission gates the write, then the file appears', async () => {
@@ -166,19 +217,19 @@ await scenario('setup: leave a session whose last turn failed', async () => {
   await idle(FAILED_PROMPT)
 })
 
-await scenario('position: the switcher sits between the + button and the permission control', async () => {
+// The CLI's mode belongs to that CLI, so it reads next to the switcher — and the harness's
+// access control, which would answer for a session the harness runs, steps out of the row.
+await scenario('position: the mode sits between the + button, the CLI and the model', async () => {
   await newCliSession(FAKE)
   const left = (await page.getByRole('button', { name: '添加文件或调用指令' }).last().boundingBox())?.x
   const switcher = await cliSwitcher().boundingBox()
-  const permission = (
-    await page
-      .getByRole('button', { name: /^访问模式/ })
-      .last()
-      .boundingBox()
-  )?.x
+  const mode = await page.locator('.dsh-cli-mode-seat').boundingBox()
+  const model = await modelTrigger().boundingBox()
   await shot('switcher')
-  if (!(left < switcher.x && switcher.x < permission))
-    throw new Error(`order: + ${left}, switcher ${switcher.x}, permission ${permission}`)
+  if (!(left < switcher.x && switcher.x < mode.x && mode.x < model.x))
+    throw new Error(`order: + ${left}, switcher ${switcher.x}, mode ${mode.x}, model ${model.x}`)
+  const access = await page.getByRole('button', { name: /^访问模式/ }).count()
+  if (access !== 0) throw new Error('the access control is still in the row')
 })
 
 // The default row stands for Fake Small, so Fake Small gets no second row of its own.

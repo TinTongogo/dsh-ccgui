@@ -128,12 +128,13 @@ describe('apply', () => {
     expect(inject).toEqual(['slots', 'modelDirectories', 'sessions'])
   })
 
-  it('registers the switcher, the model menu, the session mark and the settings section in their slots', () => {
+  it('registers the switcher, the model menu, the mode seat, the session mark and the settings section in their slots', () => {
     const h = harness()
     expect(h.registrations.map(({ options }) => [options.id, options.name, options.order])).toEqual([
       ['dsh-ccgui.switcher', 'conversation.input.left', undefined],
       ['dsh-ccgui.model-menu', 'conversation.input.right', 1000],
       ['dsh-ccgui.session-mark', 'sidebar.session.row.leading', 20],
+      ['dsh-ccgui.mode-seat', 'conversation.input.left', 1],
       ['dsh-ccgui.session-status-mark', 'sidebar.session.row.trailing', undefined],
       ['dsh-ccgui.settings', 'settings.section', 50],
       ['dsh-ccgui.settings', 'settings.section.icon', undefined],

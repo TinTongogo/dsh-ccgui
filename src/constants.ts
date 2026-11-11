@@ -20,6 +20,13 @@ export const CLI_ROUTE_PREFIX = 'cli-'
  */
 export const cliRoute = (id: string): string => `${CLI_ROUTE_PREFIX}${id}`
 
+/**
+ * Whether a provider route is a CLI's rather than one of the harness's own.
+ * @param provider - a provider route, or nothing before one is chosen.
+ * @returns true for a CLI route.
+ */
+export const isCliRoute = (provider: string | undefined): boolean => provider?.startsWith(CLI_ROUTE_PREFIX) ?? false
+
 /** Model id meaning whatever the CLI itself is set to. */
 export const DEFAULT_MODEL_ID = 'default'
 

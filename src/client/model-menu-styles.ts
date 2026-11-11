@@ -24,6 +24,8 @@ export const HEADING_CLASS = 'dsh-cli-model-heading'
 export const GROUP_CLASS = 'dsh-cli-model-group'
 export const EFFORT_CLASS = 'dsh-cli-model-effort'
 export const MODE_CLASS = 'dsh-cli-model-mode'
+/** The CLI's mode control, sitting in the composer's permission seat. */
+export const MODE_SEAT_CLASS = 'dsh-cli-mode-seat'
 
 // The first rule hides the harness's seat, which renders right after this control's slot;
 // the anchors set `display: contents` inline, hence `!important`. If the harness changes its
@@ -164,5 +166,10 @@ export const MODEL_MENU_STYLES = `
 /* The CLI's own mode sits beside the level, read the same way so neither outranks the name. */
 .${MODE_CLASS} { display: var(--dsh-composer-model-text-display, block); flex: 0 0 auto; }
 .${MODE_CLASS} .${TRIGGER_CLASS} { padding: 0 4px; color: var(--dsw-alias-label-caption); }
+/* The permission seat holds one control: on a CLI session that is the CLI's own mode, so
+   the harness's access control steps aside. Its own seat keeps it on every other session. */
+.${MODE_SEAT_CLASS} { display: inline-flex; min-width: 0; }
+.${MODE_SEAT_CLASS} .${TRIGGER_CLASS} { padding: 0 4px 0 8px; color: var(--dsw-alias-label-secondary); }
+[data-composer-card]:has(.${MODE_SEAT_CLASS}) [aria-label^="访问模式"] { display: none !important; }
 .${HINT_CLASS} { padding: 8px; color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 18px; }
 `
