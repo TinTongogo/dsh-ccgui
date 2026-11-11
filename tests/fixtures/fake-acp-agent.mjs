@@ -173,6 +173,12 @@ function runPrompt(sessionId, text) {
     say(sessionId, `model=${currentModel}`)
     return 'end_turn'
   }
+  if (text.trim().startsWith('REFUSE')) {
+    // Real CLIs refuse without streaming a word: one writes the reason to stderr, the
+    // other attaches it to the response. Neither is visible as assistant text.
+    if (!text.includes('META')) process.stderr.write('codebuddy: quota exceeded for hy4-free\n')
+    return 'refusal'
+  }
   if (text.trim() === 'WHICH MODE') {
     say(sessionId, `mode=${currentMode}`)
     return 'end_turn'
@@ -219,7 +225,9 @@ async function handleRequest({ id, method, params }) {
       return respond(id, {})
     case 'session/prompt': {
       const text = params.prompt.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join(' ')
-      return respond(id, { stopReason: await runPrompt(params.sessionId, text), usage: TURN_USAGE })
+      const stopReason = await runPrompt(params.sessionId, text)
+      const meta = text.includes('META') ? { _meta: { error: 'Hy4 限时免费模型的额度已用尽' } } : {}
+      return respond(id, { stopReason, usage: TURN_USAGE, ...meta })
     }
     default:
       return send({ id, error: { code: -32601, message: `unknown method ${method}` } })

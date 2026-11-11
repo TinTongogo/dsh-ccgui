@@ -30,6 +30,8 @@ export interface TurnOutcome {
    * so a refusal's real reason only arrives as `session/update` content.
    */
   readonly text: string
+  /** What the CLI attached to its answer, or left on stderr, when it streamed nothing. */
+  readonly diagnostics?: string
 }
 
 /** Long refusals would bury the reason in a whole answer; keep its tail. */
@@ -42,6 +44,36 @@ export function errorMessage(error: unknown): string {
 
 function failureFinish(message: string, code: string): FinishReason {
   return { kind: 'error', failure: { message, code } }
+}
+
+/** A CLI's own words for why it stopped, when it attached them instead of streaming text. */
+function attachedReason(meta: Readonly<Record<string, unknown>> | null | undefined): string {
+  if (meta === null || meta === undefined) return ''
+  const named = [meta.error, meta.message, meta.reason].find((field) => typeof field === 'string')
+  return refusalDetail(typeof named === 'string' ? named : JSON.stringify(meta))
+}
+
+/** The last few lines a CLI wrote to stderr, which is the only place some of them explain. */
+function logTail(stderr: string | undefined): string {
+  const lines = (stderr ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '')
+  return refusalDetail(lines.slice(-2).join(' '))
+}
+
+/**
+ * What the CLI left behind when it ended without saying why in the stream.
+ * @param meta - the response's `_meta`, when the CLI attached one.
+ * @param stderr - the CLI's stderr tail at the moment the turn ended.
+ * @returns a one-line reason, or '' when there is nothing to show.
+ */
+export function turnDiagnostics(
+  meta: Readonly<Record<string, unknown>> | null | undefined,
+  stderr: string | undefined,
+): string {
+  const attached = attachedReason(meta)
+  return attached === '' ? logTail(stderr) : attached
 }
 
 /** Collapse a CLI explanation into one line, keeping its tail if it is long. */
@@ -69,10 +101,12 @@ function finishReason(end: TurnOutcome, label: string): FinishReason {
       return { kind: 'aborted', failure: { message: `${label} 已取消本轮。`, code: 'ABORTED' } }
     case 'refusal': {
       const detail = refusalDetail(end.text)
+      if (detail !== '') return failureFinish(`${label} 拒绝继续这个请求：${detail}`, 'CLI_REFUSAL')
+      const behind = end.diagnostics?.trim() ?? ''
       const message =
-        detail === ''
+        behind === ''
           ? `${label} 拒绝继续这个请求，但未说明原因（可查看 CLI 日志了解详情）。`
-          : `${label} 拒绝继续这个请求：${detail}`
+          : `${label} 拒绝继续这个请求：${behind}`
       return failureFinish(message, 'CLI_REFUSAL')
     }
     case 'max_turn_requests':

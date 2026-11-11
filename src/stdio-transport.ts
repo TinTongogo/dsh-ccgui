@@ -160,6 +160,7 @@ function connectAgent(child: SubprocessHandle, handlers: TransportHandlers) {
 function sessionOperations(
   agent: ReturnType<typeof connectAgent>,
   untilClosed: UntilClosed,
+  readStderr: () => string,
 ): Omit<AcpTransport, 'initialize' | 'dispose'> {
   const { session } = methods.agent
   return {
@@ -185,8 +186,18 @@ function sessionOperations(
       await untilClosed(agent.request(session.close, { sessionId }))
     },
     prompt: async (sessionId, blocks) => {
-      const { stopReason, usage } = await untilClosed(agent.request(session.prompt, { sessionId, prompt: [...blocks] }))
-      return { stopReason, usage }
+      const answer = await untilClosed(agent.request(session.prompt, { sessionId, prompt: [...blocks] }))
+      const { stopReason, usage, _meta } = answer
+      // Read the tail now: this is the moment the CLI stopped explaining itself, and the
+      // process may be replaced before anyone looks at the failure. Nothing is added when
+      // there is nothing to add, so a plain turn keeps its plain outcome.
+      const stderr = readStderr()
+      return {
+        stopReason,
+        usage,
+        ...(_meta == null ? {} : { meta: _meta }),
+        ...(stderr === '' ? {} : { stderr }),
+      }
     },
     cancel: (sessionId) => {
       // Best effort: if the process is already gone, `closed` has reported it.
@@ -220,7 +231,7 @@ export function openStdioTransport(spec: StdioTransportSpec, handlers: Transport
           clientCapabilities: {},
         }),
       ),
-    ...sessionOperations(agent, untilClosed),
+    ...sessionOperations(agent, untilClosed, () => stderrTail(child)),
     dispose: (force = false) => {
       if (force) child.terminate()
       return (disposal ??= stopChild(child, spec.eofGraceMs))

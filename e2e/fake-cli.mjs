@@ -322,6 +322,22 @@ await scenario('model switch mid-session: the next message runs on the new model
   await untilText('model=fake-small')
 })
 
+// A refusal has no field of its own in ACP. A CLI that explains itself nowhere in the
+// stream must still not leave the user with "未说明原因" when the reason is right there.
+await scenario('refusal: the reason the CLI attached reaches the failure', async () => {
+  await newCliSession(FAKE)
+  await send('REFUSE META')
+  await untilText('Hy4 限时免费模型的额度已用尽')
+  await idle('REFUSE META')
+  if (!(await bodyText()).includes('拒绝继续这个请求')) throw new Error('not reported as a refusal')
+})
+
+await scenario('refusal: the log is quoted when the CLI attached nothing', async () => {
+  await send('REFUSE')
+  await untilText('quota exceeded for hy4-free')
+  await idle('REFUSE', 2)
+})
+
 await scenario('locked: a started session keeps its CLI, and says how to change', async () => {
   if (!(await cliSwitcher().isDisabled())) throw new Error('switcher still enabled after the session started')
   const title = await cliSwitcher().getAttribute('title')

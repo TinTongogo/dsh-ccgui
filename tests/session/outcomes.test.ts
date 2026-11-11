@@ -1,7 +1,7 @@
 import type { StopReason } from '@agentclientprotocol/sdk'
 import { LlmError } from '@deepseek-ai/dsh-llm'
 import { describe, expect, it } from 'vitest'
-import { errorMessage, toolCallStep, turnEndStep, turnFailure } from '../../src/session/outcomes.ts'
+import { errorMessage, toolCallStep, turnDiagnostics, turnEndStep, turnFailure } from '../../src/session/outcomes.ts'
 import { ptcCall } from '../../src/session/ptc-call.ts'
 import { nativeReplayState } from '../../src/request-input.ts'
 import { appendDelta, EMPTY_BLOCKS } from '../../src/stream-blocks.ts'
@@ -10,8 +10,9 @@ import { mergeToolUpdate, toCliToolArgs } from '../../src/tool-record.ts'
 const LABEL = 'X CLI'
 const REPLAY = { replayState: nativeReplayState('acp-1', 'dsh-1') }
 
-function finishOf(stopReason: StopReason, text = ''): unknown {
-  const { chunks } = turnEndStep(EMPTY_BLOCKS, { stopReason, text }, LABEL, REPLAY)
+function finishOf(stopReason: StopReason, text = '', diagnostics?: string): unknown {
+  const end = { stopReason, text, ...(diagnostics === undefined ? {} : { diagnostics }) }
+  const { chunks } = turnEndStep(EMPTY_BLOCKS, end, LABEL, REPLAY)
   return chunks.at(-1)
 }
 
@@ -95,8 +96,53 @@ describe('refusal details', () => {
     expect(message.length).toBeLessThan(450)
   })
 
+  // Some CLIs refuse without streaming a word: the reason is then on the answer's `_meta`
+  // or on stderr, and the user must not be told there was no reason at all.
+  it('falls back to what the CLI left behind when it streamed nothing', () => {
+    expect(finishOf('refusal', '', 'Hy4 限时免费模型今日额度已用尽')).toMatchObject({
+      reason: {
+        kind: 'error',
+        failure: {
+          code: 'CLI_REFUSAL',
+          message: 'X CLI 拒绝继续这个请求：Hy4 限时免费模型今日额度已用尽',
+        },
+      },
+    })
+  })
+
+  it('still says nothing was given when neither the answer nor the log has a reason', () => {
+    expect(finishOf('refusal', '', '   ')).toMatchObject({
+      reason: { failure: { message: 'X CLI 拒绝继续这个请求，但未说明原因（可查看 CLI 日志了解详情）。' } },
+    })
+  })
+
   it('leaves a normal finish untouched even when the CLI produced text', () => {
     expect(finishOf('end_turn', 'a complete answer')).toMatchObject({ reason: { kind: 'stop' } })
+  })
+})
+
+describe('turnDiagnostics', () => {
+  it('prefers a named field of the answer', () => {
+    expect(turnDiagnostics({ error: '额度已用尽' }, 'noise')).toBe('额度已用尽')
+    expect(turnDiagnostics({ message: '模型不可用' }, '')).toBe('模型不可用')
+    expect(turnDiagnostics({ reason: '被内容策略拒绝' }, '')).toBe('被内容策略拒绝')
+  })
+
+  it('keeps an answer it does not recognise instead of dropping it', () => {
+    expect(turnDiagnostics({ code: 'QUOTA_EXCEEDED', retryAfter: 30 }, '')).toBe(
+      '{"code":"QUOTA_EXCEEDED","retryAfter":30}',
+    )
+  })
+
+  it('reads the last lines of the log when the answer carries nothing', () => {
+    expect(turnDiagnostics(undefined, 'starting up\nquota exceeded for hy4-free\n')).toBe(
+      'starting up quota exceeded for hy4-free',
+    )
+    expect(turnDiagnostics(null, '   \n  ')).toBe('')
+  })
+
+  it('has nothing to say without an answer or a log', () => {
+    expect(turnDiagnostics(undefined, undefined)).toBe('')
   })
 })
 

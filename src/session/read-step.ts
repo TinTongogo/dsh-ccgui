@@ -8,7 +8,7 @@ import type { LlmError, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { appendDelta, closeOpenBlock, EMPTY_BLOCKS } from '../stream-blocks.ts'
 import type { BlockState } from '../stream-blocks.ts'
 import type { ToolRecord } from '../tool-record.ts'
-import { toolCallStep, turnEndStep, turnFailure } from './outcomes.ts'
+import { toolCallStep, turnDiagnostics, turnEndStep, turnFailure } from './outcomes.ts'
 import type { ReplayFields, StepResult, TurnOutcome } from './outcomes.ts'
 import type { PtcWrap } from './ptc-call.ts'
 import type { TurnEnd } from './turn-queue.ts'
@@ -93,6 +93,10 @@ function applyTurnEnd(
   detail: string,
 ): StepResult {
   if (source.hasWork()) return { state: blocks, chunks: [], done: false }
-  const outcome: TurnOutcome = { stopReason: end.stopReason, text: detail }
+  const outcome: TurnOutcome = {
+    stopReason: end.stopReason,
+    text: detail,
+    diagnostics: turnDiagnostics(end.meta, end.stderr),
+  }
   return turnEndStep(blocks, outcome, source.label, source.replay())
 }
