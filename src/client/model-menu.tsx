@@ -44,7 +44,7 @@ export interface ModelMenuInjected {
   select: SelectModel
   /** Reads and switches the CLI's own modes; absent where the harness offers no route. */
   modes?: ModeApi
-  session: Store<{ removed?: boolean }> | undefined
+  session: Store<{ blank?: boolean; removed?: boolean }> | undefined
 }
 
 /**
@@ -159,6 +159,18 @@ function useRemoved(session: ModelMenuInjected['session']): boolean {
   )
 }
 
+/** True once the session has a message: before that, its CLI has no process of its own yet. */
+function useStarted(session: ModelMenuInjected['session']): boolean {
+  return useSyncExternalStore(
+    (listener) =>
+      session?.subscribe(listener) ??
+      (() => {
+        /* no session, nothing to unsubscribe */
+      }),
+    () => session?.getSnapshot().blank === false,
+  )
+}
+
 /**
  * Render the control, or nothing for an addressed subagent.
  * @param props - what the slot injected.
@@ -174,6 +186,7 @@ export function CliModelMenu({
 }: ModelMenuInjected): ReactElement | null {
   const state = useStore(directory)
   const locked = useRemoved(session)
+  const started = useStarted(session)
   if (!available) return null
   const models = menuModels(state)
   const pending = state.pending ?? null
@@ -181,7 +194,7 @@ export function CliModelMenu({
     <div className={GROUP_CLASS}>
       <ModelSeat models={models} pending={pending} locked={locked} load={load} select={select} />
       <EffortMenu models={models} pending={pending} locked={locked} select={select} />
-      <ModeMenu provider={models.current?.provider} api={modes} locked={locked} />
+      <ModeMenu provider={models.current?.provider} api={modes} locked={locked} started={started} />
     </div>
   )
 }

@@ -23,6 +23,10 @@ import { CHEVRON_CLASS, LABEL_CLASS, MODE_CLASS, TRIGGER_CLASS } from './model-m
 const UNKNOWN_ERROR_LABEL = '未知错误'
 /** A pick made before the CLI started only takes effect with the next message. */
 const PENDING_HINT = '，下一条消息发送时生效'
+/** How often to ask again while a pick waits for the CLI to take it. */
+export const MODE_POLL_MS = 1500
+/** Enough tries to cover a process that starts slowly, and then the control goes quiet. */
+const MODE_POLL_TRIES = 40
 
 /** What the composer hands the control. */
 export interface ModeMenuProps {
@@ -31,6 +35,8 @@ export interface ModeMenuProps {
   /** Absent where the harness offers no mode route, which leaves the control out. */
   readonly api: ModeApi | undefined
   readonly locked: boolean
+  /** False before the session's first message, when there is no CLI process to change. */
+  readonly started: boolean
 }
 
 interface Failure {
@@ -51,12 +57,15 @@ const textOf = (reason: unknown): string => (reason instanceof Error ? reason.me
 
 /**
  * Read the modes for this session's CLI, and again whenever asked: a name read once would
- * go stale as soon as the CLI changed its own mode.
+ * go stale as soon as the CLI changed its own mode. A pick the CLI has not taken yet only
+ * moves once a message runs, and nothing tells this control when that happened, so it keeps
+ * asking for a while instead of leaving a stale hint in place.
  * @param api - the mode route, absent when the harness offers none.
  * @param provider - the CLI route the session is on.
+ * @param started - whether the session has a CLI process that could take the pick.
  * @returns the last answer, a way to ask again and a way to take in a newer answer.
  */
-function useModeReading(api: ModeApi | undefined, provider: string | undefined): Reading {
+function useModeReading(api: ModeApi | undefined, provider: string | undefined, started: boolean): Reading {
   const [reply, setReply] = useState<ModeReply | undefined>()
   useEffect(() => {
     if (api === undefined || provider === undefined) {
@@ -82,6 +91,22 @@ function useModeReading(api: ModeApi | undefined, provider: string | undefined):
       /* keep the last answer; the menu is still usable */
     })
   }, [api, provider])
+  const pending = reply?.pending
+  useEffect(() => {
+    if (pending === undefined || !started) return undefined
+    let tries = 0
+    const timer = setInterval(() => {
+      tries += 1
+      if (tries > MODE_POLL_TRIES) {
+        clearInterval(timer)
+        return
+      }
+      refresh()
+    }, MODE_POLL_MS)
+    return () => {
+      clearInterval(timer)
+    }
+  }, [pending, started, refresh])
   return { reply, refresh, accept: setReply }
 }
 
@@ -273,11 +298,11 @@ function ModeControl({ api, provider, reply, modes, locked, refresh, accept }: C
 
 /**
  * Render the mode button and its menu, or nothing when the CLI reports no modes.
- * @param props - the CLI route, the mode API and whether the session is gone.
+ * @param props - the CLI route, the mode API, whether the session is gone and whether it started.
  * @returns the control.
  */
-export function ModeMenu({ provider, api, locked }: ModeMenuProps): ReactElement | null {
-  const { reply, refresh, accept } = useModeReading(api, provider)
+export function ModeMenu({ provider, api, locked, started }: ModeMenuProps): ReactElement | null {
+  const { reply, refresh, accept } = useModeReading(api, provider, started)
   if (api === undefined || provider === undefined || reply?.modes === undefined) return null
   const { modes } = reply
   if (modes.options.length === 0) return null

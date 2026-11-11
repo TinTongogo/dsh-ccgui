@@ -9,9 +9,10 @@
 
 import { cleanup, render, screen } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
+import type { ReactElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ModeApi, ModeReply } from '../../src/client/mode-api.ts'
-import { ModeMenu } from '../../src/client/mode-menu.tsx'
+import { MODE_POLL_MS, ModeMenu } from '../../src/client/mode-menu.tsx'
 
 const MODES = {
   configId: 'permission_mode',
@@ -37,19 +38,21 @@ function setup({
   read = () => Promise.resolve(reply),
   write = () => Promise.resolve(ANSWER),
   locked = false,
+  started = true,
   provider = 'cli-x',
 }: {
   reply?: ModeReply
   read?: ModeApi['read']
   write?: ModeApi['write']
   locked?: boolean
+  started?: boolean
   provider?: string | undefined
 } = {}): Setup {
   const reading = vi.fn<ModeApi['read']>(read)
   const written = vi.fn<ModeApi['write']>(write)
   render(
     <div data-composer-card>
-      <ModeMenu provider={provider} api={{ read: reading, write: written }} locked={locked} />
+      <ModeMenu provider={provider} api={{ read: reading, write: written }} locked={locked} started={started} />
     </div>,
   )
   return { read: reading, write: written, user: userEvent.setup() }
@@ -67,13 +70,13 @@ describe('ModeMenu', () => {
 
   it('stays out of the way when the session has no CLI route', () => {
     const { container } = render(
-      <ModeMenu provider={undefined} api={{ read: vi.fn(), write: vi.fn() }} locked={false} />,
+      <ModeMenu provider={undefined} api={{ read: vi.fn(), write: vi.fn() }} locked={false} started />,
     )
     expect(container.innerHTML).toBe('')
   })
 
   it('stays out of the way when no mode route is offered', () => {
-    const { container } = render(<ModeMenu provider="cli-x" api={undefined} locked={false} />)
+    const { container } = render(<ModeMenu provider="cli-x" api={undefined} locked={false} started />)
     expect(container.innerHTML).toBe('')
   })
 
@@ -153,6 +156,53 @@ describe('ModeMenu', () => {
     const button = await trigger()
     expect(button.getAttribute('aria-label')).toBe('CLI 模式，当前 Plan')
     expect(button.getAttribute('title')).toContain('下一条消息发送时生效')
+  })
+
+  // Nothing changes a pick until a message runs, and nothing tells the control when that
+  // happened: it asks again for a while, then stops.
+  it('asks again while a pick waits for a running session', async () => {
+    let answer: ModeReply = { modes: MODES, pending: 'plan' }
+    const read = vi.fn<ModeApi['read']>(() => Promise.resolve(answer))
+    const api = { read, write: vi.fn<ModeApi['write']>() }
+    const view = (started: boolean): ReactElement => (
+      <div data-composer-card>
+        <ModeMenu provider="cli-x" api={api} locked={false} started={started} />
+      </div>
+    )
+    const { rerender } = render(view(true))
+    await vi.waitFor(() => {
+      expect(read).toHaveBeenCalledTimes(1)
+    })
+    await vi.waitFor(
+      () => {
+        expect(read.mock.calls.length).toBeGreaterThan(1)
+      },
+      { timeout: MODE_POLL_MS * 4 },
+    )
+    answer = { modes: { ...MODES, current: 'plan' }, pending: undefined }
+    await vi.waitFor(
+      () => {
+        expect(screen.getByRole('button', { name: /CLI 模式/ }).getAttribute('title')).not.toContain('下一条')
+      },
+      { timeout: MODE_POLL_MS * 4 },
+    )
+    const settled = read.mock.calls.length
+    await new Promise((resolve) => {
+      setTimeout(resolve, MODE_POLL_MS + 300)
+    })
+    expect(read.mock.calls.length).toBe(settled)
+    rerender(view(false))
+    expect(screen.getByRole('button', { name: /CLI 模式/ }).getAttribute('title')).not.toContain('下一条')
+  })
+
+  it('does not ask again before the session has a CLI to take the pick', async () => {
+    const { read } = setup({ reply: { modes: MODES, pending: 'plan' }, started: false })
+    await trigger()
+    const asked = read.mock.calls.length
+    await new Promise((resolve) => {
+      setTimeout(resolve, MODE_POLL_MS + 700)
+    })
+    expect(read.mock.calls.length).toBe(asked)
   })
 
   it('is closed while the session is gone', async () => {
