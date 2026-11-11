@@ -19,6 +19,7 @@ const capabilities = {
 }
 const sessions = new Map()
 let currentModel = 'fake-small'
+let currentMode = 'default'
 const TURN_USAGE = { totalTokens: 1200, inputTokens: 150, outputTokens: 50, cachedReadTokens: 1000 }
 const configOptions = () => [
   {
@@ -30,6 +31,17 @@ const configOptions = () => [
     options: [
       { value: 'fake-small', name: 'Fake Small' },
       { value: 'fake-large', name: 'Fake Large' },
+    ],
+  },
+  {
+    id: 'mode',
+    name: 'Mode',
+    category: 'mode',
+    type: 'select',
+    currentValue: currentMode,
+    options: [
+      { value: 'default', name: 'Default' },
+      { value: 'plan', name: 'Plan' },
     ],
   },
 ]
@@ -161,6 +173,10 @@ function runPrompt(sessionId, text) {
     say(sessionId, `model=${currentModel}`)
     return 'end_turn'
   }
+  if (text.trim() === 'WHICH MODE') {
+    say(sessionId, `mode=${currentMode}`)
+    return 'end_turn'
+  }
   const [command, argument] = text.trim().split(/\s+/)
   switch (command) {
     case 'WRITE':
@@ -195,6 +211,7 @@ async function handleRequest({ id, method, params }) {
       return respond(id, { configOptions: configOptions() })
     case 'session/set_config_option':
       if (params.configId === 'model') currentModel = params.value
+      if (params.configId === 'mode') currentMode = params.value
       return respond(id, { configOptions: configOptions() })
     case 'session/delete':
     case 'session/close':

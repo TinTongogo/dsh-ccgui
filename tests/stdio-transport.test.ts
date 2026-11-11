@@ -108,11 +108,22 @@ describe('openStdioTransport', () => {
     const { transport, updates, cwd } = open()
     await transport.initialize()
     const { sessionId, configOptions } = await transport.newSession(cwd)
-    expect(configOptions?.map((option) => option.id)).toEqual(['model'])
+    expect(configOptions?.map((option) => option.id)).toEqual(['model', 'mode'])
     const after = await transport.setConfigOption(sessionId, 'model', 'fake-large')
     expect(after?.[0]).toMatchObject({ currentValue: 'fake-large' })
     await transport.prompt(sessionId, text('WHICH MODEL'))
     expect(updates.at(-1)).toMatchObject({ content: { text: 'model=fake-large' } })
+    await transport.dispose()
+  })
+
+  it('passes a native mode through as the id it was given', async () => {
+    const { transport, updates, cwd } = open()
+    await transport.initialize()
+    const { sessionId } = await transport.newSession(cwd)
+    const after = await transport.setConfigOption(sessionId, 'mode', 'plan')
+    expect(after?.find((option) => option.id === 'mode')).toMatchObject({ currentValue: 'plan' })
+    await transport.prompt(sessionId, text('WHICH MODE'))
+    expect(updates.at(-1)).toMatchObject({ content: { text: 'mode=plan' } })
     await transport.dispose()
   })
 

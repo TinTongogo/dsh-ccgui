@@ -31,6 +31,8 @@ const harnessSeatDisplays = () =>
   page
     .locator('[data-slot="conversation.input.model"]')
     .evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).display))
+// The composer's own control for the CLI's native modes, beside the model and its level.
+const modeTrigger = () => page.getByRole('button', { name: /^CLI 模式，当前/ })
 
 // Must stay first, on a fresh server: for `npx` commands, starting a CLI downloads and runs
 // a package, which nobody should get just by opening the app.
@@ -220,7 +222,8 @@ await scenario('flat menu: arrows move, Enter settles, and the trigger takes the
   await page.keyboard.press('ArrowDown')
   await page.keyboard.press('Enter')
   await until(async () => (await modelTrigger().getAttribute('title')) === 'Fake Large', 'trigger naming Fake Large')
-  if ((await modelTrigger().getAttribute('aria-expanded')) === 'true') throw new Error('selection left the menu open')
+  // The row settles first and the menu closes on the next tick, so wait for both.
+  await until(async () => (await modelTrigger().getAttribute('aria-expanded')) !== 'true', 'the menu to close')
   await chooseModel(FAKE, 'Fake Small（默认）')
 })
 
@@ -274,13 +277,49 @@ await scenario('locked: a started session keeps its CLI, and says how to change'
   if (!title.includes('新建会话')) throw new Error(`hint: ${title}`)
 })
 
-await scenario('PTC: a CLI refuses clearly in the mode it cannot run in', async () => {
+// The CLI's modes are its own: the control shows the names it reported and sends the id back.
+await scenario('mode: the CLI lists its own modes, and a pick made before it runs waits', async () => {
+  await newCliSession(FAKE)
+  await until(async () => (await modeTrigger().count()) > 0, 'the CLI mode control', 30_000)
+  const label = await modeTrigger().getAttribute('aria-label')
+  if (label !== 'CLI 模式，当前 Default') throw new Error(`label: ${label}`)
+  await modeTrigger().click()
+  await sleep(300)
+  const rows = await page.getByRole('menuitem').evaluateAll((nodes) => nodes.map((node) => node.textContent))
+  if (rows.join() !== 'Default,Plan') throw new Error(`rows: ${rows.join()}`)
+  await page.getByRole('menuitem', { name: 'Plan', exact: true }).click()
+  await sleep(300)
+  // Nothing to change before the CLI session exists, so the pick says when it will apply.
+  const pending = await modeTrigger().getAttribute('title')
+  if (pending === null || !pending.includes('下一条消息发送时生效')) throw new Error(`pending hint: ${pending}`)
+  await send('WHICH MODE')
+  await untilText('mode=plan')
+  await idle('WHICH MODE')
+  await until(async () => {
+    const title = await modeTrigger().getAttribute('title')
+    return title !== null && !title.includes('下一条消息发送时生效')
+  }, 'the pick to be confirmed')
+})
+
+await scenario('mode switch mid-session: the live CLI changes before the next prompt', async () => {
+  await modeTrigger().click()
+  await sleep(300)
+  await page.getByRole('menuitem', { name: 'Default', exact: true }).click()
+  await sleep(500)
+  const title = await modeTrigger().getAttribute('title')
+  if (title === null || title.includes('下一条消息发送时生效')) throw new Error('a running CLI should apply at once')
+  await send('WHICH MODE')
+  await untilText('mode=default')
+})
+
+// A PTC session runs the CLI through run_code; nothing refuses a CLI outright any more.
+await scenario('PTC: a CLI turn runs in a PTC session', async () => {
   await newSession('PTC')
   await chooseModel(FAKE, 'Fake Small（默认）')
-  await send('ptc refused')
-  await untilText('CLI_WRONG_PRESET')
-  if (!(await bodyText()).includes('标准模式')) throw new Error('message does not name the way out')
-  await shot('ptc-refused')
+  await send('ptc echo')
+  await untilText('echo: ptc echo')
+  await idle('ptc echo')
+  await shot('ptc-session')
 })
 
 await scenario('marks: the switcher, its menu and the session list say which CLI is which', async () => {
