@@ -33,6 +33,7 @@ import { npxCacheDir, startFromNpxCache } from './npx-cache.ts'
 import { gitHandler, registerGitRoutes } from './git/git-routes.ts'
 import type { GitConnection, GitWebServer } from './git/git-routes.ts'
 import { readPtcWrap } from './session/ptc-call.ts'
+import { letCliAsk } from './session/approval-policy.ts'
 import { CliSessionRegistry } from './session-registry.ts'
 import type { CliAgentConfig, SessionStart } from './session-registry.ts'
 import { openStdioTransport } from './stdio-transport.ts'
@@ -323,9 +324,15 @@ export default class CliBridge extends Service {
     )
   }
 
+  /**
+   * Answer one CLI permission request. The CLI decided to ask; the harness's own access
+   * mode must not answer it on the user's behalf, so a "never ask" stance is lifted first
+   * (see session/approval-policy.ts).
+   */
   private ask(agent: Agent, { reason, callId }: PermissionAsk, signal: AbortSignal): Promise<ApprovalOutcome> {
     const approval = this.ctx.get('approval')
     if (approval === undefined) return Promise.resolve('unavailable')
+    letCliAsk(approval, agent)
     return approval.request({
       agent,
       toolName: CLI_TOOL_NAME,

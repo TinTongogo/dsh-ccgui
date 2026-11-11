@@ -666,6 +666,41 @@ describe('CliBridge sessions', () => {
     expect(readFileSync(join(cwd, 'out.txt'), 'utf8')).toBe('hi\n')
   })
 
+  // The access mode is DSH's stance for sessions it runs. A CLI decides for itself whether
+  // to ask, so its question must not be answered by that stance without asking anyone.
+  it('lifts a never-ask stance before asking, so the CLI question still reaches someone', async () => {
+    const h = harness()
+    const order: string[] = []
+    const approval = {
+      overrideOf: vi.fn(() => {
+        order.push('overrideOf')
+        return 'never' as const
+      }),
+      request: vi.fn((_request: ApprovalRequest) => {
+        order.push('request')
+        return Promise.resolve('allowed-once' as const)
+      }),
+    }
+    h.root.provide('approval', approval)
+    await start(h)
+    const cwd = mkdtempSync(join(tmpdir(), 'ccgui-cwd-'))
+    const { agent } = addAgent(h, { cwd })
+    const session = agent.session as unknown as { append: (type: string, data: unknown) => void }
+    session.append = vi.fn()
+    openTurn(h, 'dsh-1', ['m1'])
+    const chunks = await collect(onlyAdapter(h).stream(request({ messages: [user('m1', 'WRITE out.txt')] })))
+    const call = toolCallOf(chunks)
+    const exec = fake<ToolRunContext>({
+      agent,
+      callId: fake<ToolRunContext['callId']>(call.id),
+      signal: AbortSignal.timeout(10_000),
+    })
+    const result = (await onlyTool(h).definition.execute(call.args, exec)) as { text: string }
+    expect(result.text).toContain('Created')
+    expect(order).toEqual(['overrideOf', 'request'])
+    expect(session.append).toHaveBeenCalledWith('approval/policy', { policy: 'ask' })
+  })
+
   it('treats a missing approval service as unavailable and does not write', async () => {
     const h = harness()
     await start(h)
