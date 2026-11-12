@@ -47,9 +47,9 @@ const VENDOR_MARKS: ReadonlySet<ProviderMarkId> = new Set<ProviderMarkId>([
  * Pick a model row's mark.
  * @param row - the row's provider, model id and display name.
  * @returns the maker the model is recognised as, else the provider's mark when the provider
- * *is* that maker, else a neutral mark for a CLI's unidentifiable model, else undefined.
- * An aggregator CLI's logo never stands in for the model's maker: CodeBuddy lists Hunyuan,
- * Zhipu and MiniMax side by side, and an anonymous model has no logo to claim.
+ * *is* that maker, else the WorkBuddy mark as a placeholder for a CLI's unidentifiable model,
+ * else undefined. An aggregator CLI's logo never stands in for the model's maker: CodeBuddy
+ * lists Hunyuan, Zhipu and MiniMax side by side, and an anonymous model has no logo to claim.
  */
 export function modelMarkOf({ provider, model, name }: ModelIdentity): ProviderMarkId | undefined {
   const text = `${model} ${name}`
@@ -57,5 +57,5 @@ export function modelMarkOf({ provider, model, name }: ModelIdentity): ProviderM
   if (family !== undefined) return family[0]
   const own = markOf(provider)
   if (own === undefined) return undefined
-  return VENDOR_MARKS.has(own) ? own : 'unknown'
+  return VENDOR_MARKS.has(own) ? own : 'workbuddy'
 }

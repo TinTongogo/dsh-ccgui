@@ -6,8 +6,9 @@
 import { CLI_ROUTE_PREFIX, cliRoute } from '../constants.ts'
 
 /**
- * A mark the client can draw. Some name a CLI, some name a model vendor, `unknown` is the
- * neutral one for a model whose maker is not public, and `cli` is the generic CLI one.
+ * A mark the client can draw. Some name a CLI, some name a model vendor. A model whose maker
+ * cannot be read falls back to the WorkBuddy mark (`workbuddy`), and `cli` is the generic CLI
+ * one for a CLI with no mark of its own.
  */
 export type ProviderMarkId =
   | 'opencode'
@@ -23,7 +24,7 @@ export type ProviderMarkId =
   | 'minimax'
   | 'stepfun'
   | 'xiaomi'
-  | 'unknown'
+  | 'workbuddy'
   | 'cli'
 
 /** The fields of a session-list row this plugin reads. */

@@ -293,7 +293,7 @@ describe('CliModelMenu keyboard', () => {
 })
 
 describe('CliModelMenu search', () => {
-  it("puts each model's maker beside it and a neutral glyph where the maker is unknown", async () => {
+  it("puts each model's maker beside it and the WorkBuddy mark where the maker is unknown", async () => {
     const models = [
       { id: 'deepseek-v4', name: 'DeepSeek V4' },
       { id: 'k3', name: 'K3' },
@@ -302,7 +302,7 @@ describe('CliModelMenu search', () => {
     const { user } = setup(directoryState(models, 'k3'))
     await user.click(trigger())
     const marks = rows().map((row) => row.querySelector('[data-cli-mark]')?.getAttribute('data-cli-mark'))
-    expect(marks).toEqual(['deepseek', 'kimi', 'unknown'])
+    expect(marks).toEqual(['deepseek', 'kimi', 'workbuddy'])
     expect(rows().every((row) => row.querySelector(`.${ROW_MARK_CLASS}`) !== null)).toBe(true)
   })
 
@@ -320,7 +320,7 @@ describe('CliModelMenu search', () => {
     const { user } = setup(directoryState(models, 'hy4free', undefined, 'cli-codebuddy'))
     await user.click(trigger())
     const marks = rows().map((row) => row.querySelector('[data-cli-mark]')?.getAttribute('data-cli-mark'))
-    expect(marks).toEqual(['hunyuan', 'zhipu', 'unknown', 'minimax', 'stepfun', 'xiaomi'])
+    expect(marks).toEqual(['hunyuan', 'zhipu', 'workbuddy', 'minimax', 'stepfun', 'xiaomi'])
     expect(marks).not.toContain('codebuddy')
   })
 

@@ -183,20 +183,47 @@ function XiaomiMark(props: MarkProps): ReactElement {
   )
 }
 
-/** A model whose maker is not public gets a neutral glyph, never somebody else's brand. */
-function UnknownMark(props: MarkProps): ReactElement {
+// The WorkBuddy app icon, simplified from the vector the app ships: a green tile, the white
+// face with its cut-out, and the two eyes. The tile's warm glow is a radial gradient instead
+// of the original blur, which would muddy a 14px mark. The face overflows the tile, so it is
+// clipped to the rounded square exactly as the original is.
+const WORKBUDDY_FACE_PATH =
+  'M7.7803 2.0241C8.1955 0.7705 8.4967 0.2821 8.9932 0.0785C9.2944 -0.0436 9.9945 0.0541 10.7515 0.3228C12.6483 1.0147 16.2463 3.4568 19.999 6.6072L20.3898 6.9328L21.8307 6.6397C24.2239 6.1513 25.7299 5.9722 28.3674 5.8826C31.1189 5.785 34.0006 6.0617 37.0451 6.7211L38.0219 6.9328L39.1616 6.0048C43.2562 2.6591 46.7403 0.4611 48.5312 0.0948C49.1499 -0.0354 49.1824 -0.0354 49.4918 0.1192C49.9965 0.3635 50.3058 0.8519 50.664 1.9753C51.5025 4.5965 52.056 9.3098 51.9583 13.0055L51.9176 14.4382L52.5119 15.3337C53.0817 16.2047 53.9202 17.8002 54.2132 18.5654C54.3435 18.9155 54.376 18.9399 54.6935 18.9887C56.1262 19.2085 57.4531 20.7796 58.1125 23.0508C58.7067 25.094 58.723 28.0083 58.1613 30.1085C58.0636 30.4423 57.795 31.1261 57.5589 31.6145C56.7205 33.324 55.4343 34.3334 54.0748 34.3415C53.7981 34.3415 53.7655 34.366 53.4724 34.8869C52.0967 37.3779 50.0128 39.4537 47.2939 41.0818C44.2331 42.9053 39.9431 44.1426 34.7983 44.6717C32.0306 44.9648 25.8683 44.9892 23.239 44.7287C16.9464 44.0938 12.4448 42.6448 9.213 40.2108C7.2837 38.7618 5.4033 36.5964 4.5567 34.8544C4.3369 34.3904 4.2881 34.3415 3.9625 34.2601C2.2285 33.8287 0.7877 31.8262 0.1935 29.034C-0.0426 27.9188 -0.0671 25.5011 0.1446 24.337C0.6493 21.6181 1.9843 19.6725 3.7508 19.0701C4.2067 18.9155 4.2229 18.9073 4.4672 18.3456C4.866 17.4258 5.558 16.1233 6.0789 15.3255L6.5592 14.5766L6.5837 11.8659C6.6325 7.6491 7.0395 4.3197 7.7803 2.0241ZM9.435 22.556C9.2307 23.572 9.2307 24.7943 9.2307 27.2389C9.2307 29.6834 9.2307 30.9057 9.435 31.9218C10.2621 36.0363 13.4781 39.2523 17.5926 40.0794C18.6087 40.2836 19.8309 40.2836 22.2755 40.2836L36.338 40.2836C38.7825 40.2837 40.0048 40.2837 41.0209 40.0794C45.1354 39.2523 48.3514 36.0363 49.1785 31.9218C49.3828 30.9057 49.3828 29.6834 49.3828 27.2389C49.3828 24.7943 49.3828 23.572 49.1785 22.556C48.3514 18.4414 45.1354 15.2254 41.0209 14.3983C40.0048 14.1941 38.7825 14.1941 36.338 14.1941L22.2755 14.1941C19.8309 14.1941 18.6087 14.1941 17.5926 14.3983C13.4781 15.2254 10.2621 18.4414 9.435 22.556Z'
+const WORKBUDDY_FACE_TRANSFORM = 'matrix(0.866025 -0.5 0.5 0.866025 -5.36421 27.9364)'
+const WORKBUDDY_EYE_TRANSFORMS = [
+  'matrix(0.866025 -0.5 0.5 0.866025 22.1997 37.6023)',
+  'matrix(0.866025 -0.5 0.5 0.866025 35.18 30.1081)',
+]
+
+/** A model whose maker cannot be read carries the WorkBuddy mark as its placeholder. */
+function WorkBuddyMark(props: MarkProps): ReactElement {
+  const uid = useId().replace(/:/g, '')
+  const tile = `wb-tile-${uid}`
+  const glow = `wb-glow-${uid}`
+  const clip = `wb-clip-${uid}`
   return (
-    <svg
-      {...svgProps(props, '0 0 24 24')}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.9"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="12" cy="12" r="9" />
-      <path d="M9.7 9.3a2.4 2.4 0 1 1 3.1 2.3c-.7.3-1 .9-1 1.6v.4" />
-      <path d="M12 17.2h.01" />
+    <svg {...svgProps(props, '0 0 48 48')}>
+      <defs>
+        <linearGradient id={tile} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#0EC7A8" />
+          <stop offset="1" stopColor="#00C885" />
+        </linearGradient>
+        <radialGradient id={glow} cx="0.78" cy="0.98" r="0.8">
+          <stop offset="0" stopColor="#FFE255" stopOpacity="0.55" />
+          <stop offset="1" stopColor="#FFE255" stopOpacity="0" />
+        </radialGradient>
+        <clipPath id={clip}>
+          <rect width="48" height="48" rx="10.3579" />
+        </clipPath>
+      </defs>
+      <rect width="48" height="48" rx="10.3579" fill={`url(#${tile})`} />
+      <g clipPath={`url(#${clip})`}>
+        <rect width="48" height="48" fill={`url(#${glow})`} />
+        <path d={WORKBUDDY_FACE_PATH} fill="#fff" fillRule="evenodd" transform={WORKBUDDY_FACE_TRANSFORM} />
+        {WORKBUDDY_EYE_TRANSFORMS.map((eye) => (
+          <rect key={eye} width="4.8108" height="9.9917" rx="2.4054" fill="#fff" transform={eye} />
+        ))}
+      </g>
     </svg>
   )
 }
@@ -237,7 +264,7 @@ function GenericCliMark(props: MarkProps) {
 export function MarkGlyph({ id, size }: MarkProps): ReactElement {
   if (id === 'omp') return <OmpMark id={id} size={size} />
   if (id === 'codebuddy') return <CodeBuddyMark id={id} size={size} />
-  if (id === 'unknown') return <UnknownMark id={id} size={size} />
+  if (id === 'workbuddy') return <WorkBuddyMark id={id} size={size} />
   if (id === 'xiaomi') return <XiaomiMark id={id} size={size} />
   const colored = COLORED[id]
   if (colored !== undefined) return <ColoredMark id={id} size={size} mark={colored} />

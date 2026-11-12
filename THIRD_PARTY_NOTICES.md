@@ -33,8 +33,15 @@ SOFTWARE.
 `src/client/marks.tsx` draws other projects' marks so a person can tell the CLIs apart, and
 a model's maker apart in a CLI's model list. The names and marks belong to their owners, are
 not covered by this project's MIT license, and imply no endorsement. A model whose maker is
-not public (for example an anonymous launch such as Space-Bunny) gets a neutral glyph instead
-of another party's logo.
+not public (for example an anonymous launch such as Space-Bunny) gets the WorkBuddy mark as a
+placeholder instead of another party's logo.
+
+- WorkBuddy: the fallback mark in `marks.tsx` is simplified from the application icon shipped
+  with the WorkBuddy desktop app (`renderer/assets/workbuddy-app-icon-*.svg`). It keeps the
+  green tile, white face and eyes, but replaces the original blur with a radial gradient so
+  the mark stays readable at the 14px the menu uses. The mark belongs to its owner, is not
+  covered by this project's MIT license, and here means "no maker identified", not that the
+  model is a WorkBuddy product.
 - Xiaomi MiMo: lobe-icons ships only a wordmark, which is unreadable at the 14px the model
   menu uses. The orange monogram tile in `marks.tsx` is drawn by this project; no third-party
   path is used for it.

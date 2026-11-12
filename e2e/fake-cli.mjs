@@ -251,13 +251,13 @@ await scenario("flat menu: one click shows only this CLI's models, with no secon
 })
 
 // A CLI's own logo names the CLI, not the maker of every model it happens to list.
-await scenario('model marks: an unidentifiable model gets a neutral glyph, never a brand', async () => {
+await scenario('model marks: an unidentifiable model gets the WorkBuddy mark, never a brand', async () => {
   await modelTrigger().click()
   await sleep(300)
   const marks = await page
     .getByRole('menuitemradio')
     .evaluateAll((rows) => rows.map((row) => row.querySelector('[data-cli-mark]')?.getAttribute('data-cli-mark')))
-  if (marks.join() !== 'unknown,unknown') throw new Error(`model marks: ${marks.join()}`)
+  if (marks.join() !== 'workbuddy,workbuddy') throw new Error(`model marks: ${marks.join()}`)
   await page.keyboard.press('Escape')
   await sleep(250)
 })

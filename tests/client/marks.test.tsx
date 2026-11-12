@@ -74,7 +74,7 @@ describe('MarkGlyph', () => {
     ['minimax', 'url(#'],
     ['stepfun', 'currentColor'],
     ['xiaomi', '#FF6900'],
-    ['unknown', 'currentColor'],
+    ['workbuddy', '#0EC7A8'],
   ] as const)('draws the %s model mark', (id, paint) => {
     const svg = render(<MarkGlyph id={id} size={14} />).container.querySelector('svg')
     expect(svg?.getAttribute('data-cli-mark')).toBe(id)
@@ -82,15 +82,21 @@ describe('MarkGlyph', () => {
     expect(svg?.outerHTML).toContain(paint)
   })
 
-  it('gives every MiniMax mark its own gradient', () => {
+  // Several gradient marks on one page must each paint with their own defs. The WorkBuddy
+  // mark also carries a clip path, whose id has to be per instance too.
+  it.each(['minimax', 'workbuddy'] as const)('gives every %s mark its own defs', (id) => {
     const { container } = render(
       <>
-        <MarkGlyph id="minimax" size={14} />
-        <MarkGlyph id="minimax" size={14} />
+        <MarkGlyph id={id} size={14} />
+        <MarkGlyph id={id} size={14} />
       </>,
     )
-    const ids = Array.from(container.querySelectorAll('linearGradient'), (node) => node.id)
-    expect(ids).toHaveLength(2)
-    expect(new Set(ids).size).toBe(2)
+    const defs = Array.from(container.querySelectorAll('[id]'), (node) => node.id)
+    expect(defs.length).toBeGreaterThanOrEqual(2)
+    expect(new Set(defs).size).toBe(defs.length)
+    for (const gradient of Array.from(container.querySelectorAll('linearGradient'))) {
+      expect(gradient.id).not.toContain(':')
+      expect(container.querySelector(`[fill="url(#${gradient.id})"]`)).not.toBeNull()
+    }
   })
 })

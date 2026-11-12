@@ -41,10 +41,10 @@ describe('modelMarkOf', () => {
     expect(modelMarkOf({ provider, model, name })).toBe(mark)
   })
 
-  it('never stamps an aggregator CLI’s own logo on a model it cannot place', () => {
-    expect(modelMarkOf({ provider: 'cli-codebuddy', model: 'space-bunny', name: 'Space-Bunny' })).toBe('unknown')
-    expect(modelMarkOf({ provider: 'cli-opencode', model: 'big-pickle', name: 'Big Pickle' })).toBe('unknown')
-    expect(modelMarkOf({ provider: 'cli-someone-elses', model: 'x1', name: 'X1' })).toBe('unknown')
+  it('falls back to the WorkBuddy mark, never an aggregator CLI’s own logo', () => {
+    expect(modelMarkOf({ provider: 'cli-codebuddy', model: 'space-bunny', name: 'Space-Bunny' })).toBe('workbuddy')
+    expect(modelMarkOf({ provider: 'cli-opencode', model: 'big-pickle', name: 'Big Pickle' })).toBe('workbuddy')
+    expect(modelMarkOf({ provider: 'cli-someone-elses', model: 'x1', name: 'X1' })).toBe('workbuddy')
   })
 
   it('keeps a provider’s mark when the provider really is the model’s maker', () => {
