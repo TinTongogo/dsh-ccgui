@@ -1,9 +1,10 @@
 /**
- * What the composer's model control lists for a session. On a CLI that is the CLI's own
- * models. On anything else it is every provider the harness runs itself, with the CLIs left
- * out: a CLI cannot pick up a conversation it took no part in, which is also why the switcher
- * locks once a session has started. The harness's own seat lists every provider in its one
- * global catalog and offers no way to narrow it per session, so this control replaces it.
+ * What the composer's model control lists on a CLI session: that CLI's own models. The
+ * harness-provider branch is still derived here, so callers such as the mode seat can resolve
+ * the current selection, but a session the harness runs no longer renders this menu: it keeps
+ * its native model seat, which also carries settings such as the agent-team toggle. The
+ * harness's own seat lists every provider in its one global catalog and offers no way to
+ * narrow it per session, which is why a CLI session needs a control of its own.
  * @module dsh-ccgui/client/menu-models
  */
 

@@ -79,24 +79,14 @@ await scenario('lazy: opening the app starts no CLI', async () => {
   if (running !== '') throw new Error(`already running: ${running}`)
 })
 
-// Also needs the fresh server, while the session is not on a CLI yet. The harness's seat
-// would list every CLI here too, which a started session cannot move to.
-await scenario("seat: a session not on a CLI lists the harness's providers, not the CLIs", async () => {
-  if ((await page.locator('.dsh-cli-model').count()) !== 1) throw new Error("the plugin's control is missing")
+// The harness's own model seat carries settings such as the agent-team toggle, so a session
+// it runs keeps that seat and its native menu. Only a CLI session replaces it.
+await scenario('seat: a harness session keeps its native model control', async () => {
+  if ((await page.locator('.dsh-cli-model').count()) !== 0) throw new Error("the plugin's control replaced the seat")
   const seats = await harnessSeatDisplays()
-  if (!seats.every((display) => display === 'none')) throw new Error(`harness seat: ${seats.join()}`)
-  await modelTrigger().click()
-  await sleep(500)
-  // This home signs in to no provider, so the harness may have nothing of its own to list.
-  const headings = await page.locator('.dsh-cli-model-heading').allInnerTexts()
-  const rows = await page
-    .getByRole('menuitemradio')
-    .evaluateAll((items) => items.map((item) => item.getAttribute('title')))
-  await shot('model-menu-harness')
-  await page.keyboard.press('Escape')
-  await sleep(250)
-  if (headings.includes(FAKE) || rows.some((name) => name?.startsWith('Fake')))
-    throw new Error(`lists a CLI: ${headings.join()} / ${rows.join()}`)
+  if (seats.length === 0 || seats.some((display) => display === 'none'))
+    throw new Error(`harness seat hidden or missing: ${seats.join()}`)
+  await shot('native-model-seat')
   // This session is the harness's own, so the access control keeps the composer's seat
   // and the CLI's mode control stays out of it.
   if ((await page.getByRole('button', { name: /^访问模式/ }).count()) === 0) throw new Error('no access control')

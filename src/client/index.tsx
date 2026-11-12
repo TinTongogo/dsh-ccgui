@@ -315,8 +315,9 @@ function registerSwitchableFeatures(ctx: ClientContext, settings: FeatureSetting
 export const inject = ['slots', 'modelDirectories', 'sessions']
 
 /**
- * Put the composer's controls in their seats: the CLI switcher, the model menu in place of
- * the harness's, and the CLI's modes in the seat that answers "what may run".
+ * Put the composer's controls in their seats: the CLI switcher, the model menu that takes
+ * the harness's seat on CLI sessions only, and the CLI's modes in the seat that answers
+ * "what may run".
  * @param ctx - the plugin's client context.
  * @param cliPrefs - the remembered CLI choice, which the switcher orders itself by.
  */

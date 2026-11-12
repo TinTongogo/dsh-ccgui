@@ -1,11 +1,12 @@
 /// <reference lib="dom" />
 
 /**
- * The composer's model control, in place of the harness's seat. That seat lists every
- * provider, CLIs included, for every session; this one lists only what the session can move
- * to (see menu-models.ts): a CLI's own models on a CLI, the harness's providers anywhere
- * else, with the reasoning level beside it (see effort-menu.tsx). The CLI's own modes are
- * not here: they take the permission seat instead (see mode-seat.tsx).
+ * The composer's model control on a CLI session, in place of the harness's seat. That seat
+ * lists every provider, CLIs included, for every session; this one lists only what the
+ * session can move to (see menu-models.ts): a CLI's own models, with the reasoning level
+ * beside it (see effort-menu.tsx). A session the harness itself runs keeps its native seat,
+ * which also carries settings such as the agent-team toggle. The CLI's own modes are not
+ * here: they take the permission seat instead (see mode-seat.tsx).
  * @module dsh-ccgui/client/model-menu
  */
 
@@ -18,6 +19,7 @@ import {
   StateDot,
   Toast,
 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { isCliRoute } from '../constants.ts'
 import type { DirectorySelection, DirectoryState } from './choices.ts'
 import { EffortMenu } from './effort-menu.tsx'
 import { menuModels } from './menu-models.ts'
@@ -146,14 +148,18 @@ function ModelSeat(props: ModelSeatProps): ReactElement {
 }
 
 /**
- * Render the control, or nothing for an addressed subagent.
+ * Render the control on a CLI session, or nothing elsewhere: an addressed subagent cannot
+ * select a model, and a harness session keeps its own seat with its own settings.
  * @param props - what the slot injected.
  * @returns the trigger and the level beside it, and while open the list.
  */
 export function CliModelMenu({ available, directory, load, select, session }: ModelMenuInjected): ReactElement | null {
   const state = useStore(directory)
   const locked = useRemoved(session)
-  if (!available) return null
+  // The harness's seat carries more than the model list, so replacing it would take those
+  // settings away from a session the harness runs. Only a CLI needs a menu of its own models.
+  // Judge by the selection rather than the resolved row: a CLI's catalog can arrive late.
+  if (!available || !isCliRoute(state.current?.provider)) return null
   const models = menuModels(state)
   const pending = state.pending ?? null
   return (

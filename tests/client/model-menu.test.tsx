@@ -114,6 +114,20 @@ describe('CliModelMenu rendering', () => {
     expect(container.innerHTML).toBe('')
   })
 
+  // The harness's own model seat carries settings such as the agent-team toggle, so a
+  // session it runs keeps that seat instead of this control.
+  it('renders nothing on a session the harness runs', () => {
+    const state: DirectoryState = {
+      groups: [{ id: 'deepseek-official', name: 'DeepSeek', models: FEW_MODELS }],
+      current: { provider: 'deepseek-official', model: 'fake-small' },
+      pending: null,
+    }
+    const { container } = render(
+      <CliModelMenu available directory={createStore(state)} load={vi.fn()} select={vi.fn()} session={undefined} />,
+    )
+    expect(container.innerHTML).toBe('')
+  })
+
   it('names the current model on the trigger', () => {
     setup()
     expect(trigger().getAttribute('title')).toBe('Fake Small（默认）')

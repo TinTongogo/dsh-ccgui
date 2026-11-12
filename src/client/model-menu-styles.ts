@@ -27,9 +27,11 @@ export const MODE_CLASS = 'dsh-cli-model-mode'
 /** The CLI's mode control, sitting in the composer's permission seat. */
 export const MODE_SEAT_CLASS = 'dsh-cli-mode-seat'
 
-// The first rule hides the harness's seat, which renders right after this control's slot;
-// the anchors set `display: contents` inline, hence `!important`. If the harness changes its
-// markup both controls show, and either still works.
+// On a CLI session the first rule hides the harness's seat, which renders right after this
+// control's slot; the anchors set `display: contents` inline, hence `!important`. A harness
+// session renders no .dsh-cli-model, so its own seat stays together with the settings that
+// live in its menu, such as the agent-team toggle. If the harness changes its markup both
+// controls show, and either still works.
 export const MODEL_MENU_STYLES = `
 [data-slot="conversation.input.right"]:has(.${ROOT_CLASS}) + [data-slot="conversation.input.model"] { display: none !important; }
 .${ROOT_CLASS} { position: relative; min-width: 0; }

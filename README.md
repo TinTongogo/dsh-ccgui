@@ -68,7 +68,7 @@ dsh plugin --profile web add dsh-ccgui@1.0.2
 
 ### 切换 CLI 和模型
 
-CLI 和模型各有一个菜单。模型菜单列出当前 CLI 真实可用的模型，第一项是它自己的默认模型，超过 4 项可搜索，中途换模型下一条消息生效；CLI 报出同名的模型时，会在名字后面补上说明或 id 来区分。不在 CLI 上的会话（比如 DeepSeek），模型菜单只列 DeepSeek 等 DSH 自己的提供方、不列 CLI，旁边是推理等级。CLI 只能在发第一条消息前切换，要换就新建会话。
+CLI 和模型各有一个菜单。CLI 会话里的模型菜单列出当前 CLI 真实可用的模型，第一项是它自己的默认模型，超过 4 项可搜索，中途换模型下一条消息生效；CLI 报出同名的模型时，会在名字后面补上说明或 id 来区分，旁边是推理等级。不在 CLI 上的会话（比如原生 DeepSeek）沿用 DSH 自己的模型选择，包括其中的推理等级和智能体团队协作开关，插件不改动它。CLI 只能在发第一条消息前切换，要换就新建会话。
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./assets/illustrations/03-model-menu-dark.webp" />
