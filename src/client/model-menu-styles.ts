@@ -4,6 +4,8 @@
  * @module dsh-ccgui/client/model-menu-styles
  */
 
+import { CLI_ROUTE_PREFIX } from '../constants.ts'
+
 export const ROOT_CLASS = 'dsh-cli-model'
 export const TRIGGER_CLASS = 'dsh-cli-model-trigger'
 export const ICON_CLASS = 'dsh-cli-model-icon'
@@ -32,7 +34,16 @@ export const MODE_SEAT_CLASS = 'dsh-cli-mode-seat'
 // session renders no .dsh-cli-model, so its own seat stays together with the settings that
 // live in its menu, such as the agent-team toggle. If the harness changes its markup both
 // controls show, and either still works.
+//
+// That native seat reads one global catalog, so it also lists every CLI even though a session
+// the harness runs cannot move to one. The next rule hides just those groups, keyed by the
+// provider id the harness puts on every model row (cli-..., the same prefix the routes use).
+// Its own providers (deepseek-account, deepseek-official) and the settings in the menu are
+// left alone. The plugin's own menu uses div[role="none"] rows with no provider id and its
+// rows live under .dsh-cli-model-rows, so neither is matched. If the harness drops the
+// attribute the groups simply show again; nothing else breaks.
 export const MODEL_MENU_STYLES = `
+[role="menu"][aria-label="模型"]:not(.${ROWS_CLASS}) section[data-menu-group]:has([data-provider-id^="${CLI_ROUTE_PREFIX}"]) { display: none !important; }
 [data-slot="conversation.input.right"]:has(.${ROOT_CLASS}) + [data-slot="conversation.input.model"] { display: none !important; }
 .${ROOT_CLASS} { position: relative; min-width: 0; }
 .${TRIGGER_CLASS} {

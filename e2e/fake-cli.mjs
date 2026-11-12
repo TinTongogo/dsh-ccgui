@@ -87,6 +87,29 @@ await scenario('seat: a harness session keeps its native model control', async (
   if (seats.length === 0 || seats.some((display) => display === 'none'))
     throw new Error(`harness seat hidden or missing: ${seats.join()}`)
   await shot('native-model-seat')
+  // The native seat reads one global catalog, so it also lists CLIs a session it runs cannot
+  // move to. Only those groups may be hidden; its own providers and settings stay put.
+  await page.locator('[data-slot="conversation.input.model"] button').first().click()
+  await sleep(400)
+  const visibleCliGroups = await page
+    .locator('section[data-menu-group]:has([data-provider-id^="cli-"])')
+    .evaluateAll((nodes) => nodes.filter((node) => getComputedStyle(node).display !== 'none').length)
+  if (visibleCliGroups !== 0) throw new Error(`${visibleCliGroups} CLI groups still listed in the native menu`)
+  // This home signs in to no provider, so plant one to prove the filter stops at the CLIs.
+  await page.evaluate(() => {
+    const menu = document.querySelector('[role="menu"][aria-label="模型"]')
+    const section = document.createElement('section')
+    section.id = 'harness-provider-probe'
+    section.setAttribute('data-menu-group', '')
+    section.innerHTML =
+      '<button type="button" role="menuitemradio"><span data-provider-id="deepseek-account">DeepSeek-V4.1-Flash</span></button>'
+    menu?.append(section)
+  })
+  const probeDisplay = await page.locator('#harness-provider-probe').evaluate((node) => getComputedStyle(node).display)
+  if (probeDisplay === 'none') throw new Error('a harness provider was hidden along with the CLIs')
+  await shot('native-model-seat-filtered')
+  await page.keyboard.press('Escape')
+  await sleep(250)
   // This session is the harness's own, so the access control keeps the composer's seat
   // and the CLI's mode control stays out of it.
   if ((await page.getByRole('button', { name: /^访问模式/ }).count()) === 0) throw new Error('no access control')

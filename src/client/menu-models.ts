@@ -4,7 +4,9 @@
  * the current selection, but a session the harness runs no longer renders this menu: it keeps
  * its native model seat, which also carries settings such as the agent-team toggle. The
  * harness's own seat lists every provider in its one global catalog and offers no way to
- * narrow it per session, which is why a CLI session needs a control of its own.
+ * narrow it per session, which is why a CLI session needs a control of its own. On a harness
+ * session a style rule hides just that catalog's CLI groups (see model-menu-styles.ts), so
+ * the native seat keeps its own providers and settings without offering a move it cannot make.
  * @module dsh-ccgui/client/menu-models
  */
 
