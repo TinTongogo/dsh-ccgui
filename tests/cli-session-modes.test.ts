@@ -67,6 +67,22 @@ describe('CliSession native modes', () => {
     await collect(session.stream({ messages: [user('1', 'hi')] }))
     expect(onModes).toHaveBeenCalledWith(expect.objectContaining({ configId: 'permission_mode', current: 'small' }))
   })
+
+  it('exposes on the session the modes the CLI last reported', async () => {
+    const { fake, session } = setupWith({}, end)
+    expect(session.modes).toBeUndefined()
+    fake.configOptions = [modelOption, modeOption]
+    await collect(session.stream({ messages: [user('1', 'hi')] }))
+    expect(session.modes).toEqual({
+      configId: 'permission_mode',
+      current: 'acceptEdits',
+      options: [
+        { value: 'default', name: 'Default' },
+        { value: 'acceptEdits', name: 'Accept edits' },
+        { value: 'plan', name: 'Plan' },
+      ],
+    })
+  })
 })
 
 // Switching goes out as the id the CLI gave, and the answer decides what the control shows.

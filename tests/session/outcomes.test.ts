@@ -159,6 +159,14 @@ describe('turnDiagnostics', () => {
     expect(turnDiagnostics({ 'codebuddy.ai/error': '内容策略拒绝' }, '')).toBe('内容策略拒绝')
   })
 
+  // A truncated or half-written payload is not a reason. Parsing fails, the malformed text
+  // stays off the screen, and stderr still gets its chance to explain.
+  it('falls back to the log when an attached error is malformed JSON', () => {
+    const truncated = { 'codebuddy.ai/errorMessage': '{"message":"当前模型配额不足"' }
+    expect(turnDiagnostics(truncated, '当前模型配额已用完，请稍后再试')).toBe('当前模型配额已用完，请稍后再试')
+    expect(turnDiagnostics(truncated, '')).toBe('')
+  })
+
   it('falls through to the log when the answer only carries ids', () => {
     const ids = { 'codebuddy.ai/requestId': 'abc', 'codebuddy.ai/traceId': 'def' }
     expect(turnDiagnostics(ids, 'quota exceeded for hy4-free')).toBe('quota exceeded for hy4-free')

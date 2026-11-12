@@ -26,7 +26,7 @@ const PENDING_HINT = '，下一条消息发送时生效'
 /** How often to ask again while a pick waits for the CLI to take it. */
 export const MODE_POLL_MS = 1500
 /** Enough tries to cover a process that starts slowly, and then the control goes quiet. */
-const MODE_POLL_TRIES = 40
+export const MODE_POLL_TRIES = 40
 
 /** What the composer hands the control. */
 export interface ModeMenuProps {

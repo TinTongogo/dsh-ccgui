@@ -7,12 +7,12 @@
  * the control stays out of the way when the CLI reports no modes.
  */
 
-import { cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import type { ReactElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ModeApi, ModeReply } from '../../src/client/mode-api.ts'
-import { MODE_POLL_MS, ModeMenu } from '../../src/client/mode-menu.tsx'
+import { MODE_POLL_MS, MODE_POLL_TRIES, ModeMenu } from '../../src/client/mode-menu.tsx'
 
 const MODES = {
   configId: 'permission_mode',
@@ -203,6 +203,38 @@ describe('ModeMenu', () => {
       setTimeout(resolve, MODE_POLL_MS + 700)
     })
     expect(read.mock.calls.length).toBe(asked)
+  })
+
+  // A pick the CLI never takes must not keep the route busy forever. Fake timers walk the
+  // whole budget at once: the interval stops itself rather than asking a 41st time.
+  it('stops asking once its polling budget runs out', async () => {
+    vi.useFakeTimers()
+    try {
+      const read = vi.fn<ModeApi['read']>(() => Promise.resolve({ modes: MODES, pending: 'plan' }))
+      const api = { read, write: vi.fn<ModeApi['write']>() }
+      render(
+        <div data-composer-card>
+          <ModeMenu provider="cli-x" api={api} locked={false} started />
+        </div>,
+      )
+      // Let the first read settle so the pending effect starts its interval.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0)
+      })
+      const initial = read.mock.calls.length
+      expect(initial).toBeGreaterThan(0)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(MODE_POLL_MS * (MODE_POLL_TRIES + 2))
+      })
+      expect(read.mock.calls.length).toBe(initial + MODE_POLL_TRIES)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(MODE_POLL_MS * 5)
+      })
+      expect(read.mock.calls.length).toBe(initial + MODE_POLL_TRIES)
+    } finally {
+      cleanup()
+      vi.useRealTimers()
+    }
   })
 
   it('is closed while the session is gone', async () => {
