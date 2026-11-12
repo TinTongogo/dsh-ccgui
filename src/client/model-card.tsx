@@ -8,6 +8,7 @@
 
 import type { CSSProperties, ReactElement, RefObject } from 'react'
 import { IconCheckOutlineRegular, Input, MenuSurface, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { compactDescription } from '../constants.ts'
 import type { DirectorySelection } from './choices.ts'
 import { MarkGlyph } from './marks.tsx'
 import { isRow, rowCount } from './menu-models.ts'
@@ -35,23 +36,6 @@ const SEARCH_LABEL = '搜索模型…'
 const NO_MATCH_LABEL = '没有匹配的模型。'
 const NO_MODELS_LABEL = '暂无可用模型'
 const ROW_MARK_SIZE = 14
-/** A one-line row has room for a short numeric label, not a sentence of marketing copy. */
-const MAX_SMALL_PRINT = 20
-/** A decimal point is not prose punctuation: it belongs to a cost multiplier like x0.00. */
-const PROSE_PUNCTUATION = /[,;:!?，。；：！？]/
-
-/**
- * Only a CLI's compact usage-cost label belongs beside a model name: it tells apart tiers
- * that share a name, such as CodeBuddy's free and paid Hy4. Providers also send sentences
- * describing what a model is good at; those crowd the row and push the check mark aside,
- * so the menu leaves them out rather than truncating them into an unreadable fragment.
- */
-function smallPrint(description: string | undefined): string | undefined {
-  if (description === undefined) return undefined
-  const text = description.trim()
-  if (text.length === 0 || text.length > MAX_SMALL_PRINT) return undefined
-  return PROSE_PUNCTUATION.test(text) || !/\d/.test(text) ? undefined : text
-}
 
 interface ModelRowProps {
   readonly domId: string
@@ -67,7 +51,8 @@ interface ModelRowProps {
 function ModelRow({ domId, model, selected, settling, active, busy, onHover, onChoose }: ModelRowProps): ReactElement {
   const check = selected ? <IconCheckOutlineRegular /> : null
   const mark = modelMarkOf(model)
-  const detail = smallPrint(model.description)
+  // Prose would crowd the row and push the check mark aside; see compactDescription.
+  const detail = compactDescription(model.description)
   return (
     <button
       type="button"

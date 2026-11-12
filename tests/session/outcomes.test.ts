@@ -193,6 +193,18 @@ describe('turnDiagnostics', () => {
     expect(turnDiagnostics(undefined, log)).toBe('codebuddy: quota exceeded for hy4-free')
   })
 
+  // Loggers commonly open a line with a bracketed level or time. That is a sentence, and
+  // often the very one that explains; only JSON arrays are structure.
+  it('keeps a log line that opens with a bracketed level or time', () => {
+    expect(turnDiagnostics(undefined, '[ERROR] quota exceeded for hy4-free\n')).toBe(
+      '[ERROR] quota exceeded for hy4-free',
+    )
+    expect(turnDiagnostics(undefined, '[2026-11-11T10:00:00Z] quota exceeded\n')).toBe(
+      '[2026-11-11T10:00:00Z] quota exceeded',
+    )
+    expect(turnDiagnostics(undefined, '[{"code":6004}]\n["quota"]\n[]\n')).toBe('')
+  })
+
   it('reads the last lines of the log when the answer carries nothing', () => {
     expect(turnDiagnostics(undefined, 'starting up\nquota exceeded for hy4-free\n')).toBe(
       'starting up quota exceeded for hy4-free',

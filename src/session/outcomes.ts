@@ -104,13 +104,14 @@ function unpackReason(value: unknown): string {
 /**
  * A reason is only worth showing if it reads like a sentence. A diagnostic dump —
  * the `_meta` object itself, a trace header, a JSON log line — is worse than the
- * plain "未说明原因" failure, so it must never reach the user.
+ * plain "未说明原因" failure, so it must never reach the user. A line that opens with a
+ * bracketed level or time (`[ERROR] …`) is a sentence; only a JSON array is structure.
  */
 function isReadableReason(text: string): boolean {
   const clean = text.trim()
   if (clean === '') return false
   return (
-    !/^[{[]/.test(clean) &&
+    !/^(?:\{|\[\s*[{["\]])/.test(clean) &&
     !/"(?:code|statusCode|category|traceparent|baggage|outcome|codebuddy\.ai\/[\w-]+)"\s*:/.test(clean)
   )
 }

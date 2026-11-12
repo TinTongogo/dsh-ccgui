@@ -117,15 +117,17 @@ describe('CliSession text turns', () => {
     })
   })
 
-  it('falls back to a reasoning chunk when the CLI explained itself only there', async () => {
+  // Thinking is the model's working, already on screen in its own block; its last lines are
+  // not a reason, and a refusal mid-thought would otherwise quote an unfinished idea.
+  it('does not present the model thinking as the refusal reason', async () => {
     const { session } = setup((t) => {
-      t.update(thought('model quota exhausted'))
+      t.update(thought('the user wants a script, let me start by'))
       return 'refusal' as const
     })
     const chunks = await collect(session.stream({ messages: [user('1', 'hi')] }))
-    expect(finishOf(chunks)?.reason).toMatchObject({
-      failure: { message: 'OpenCode 拒绝继续这个请求：model quota exhausted' },
-    })
+    const reason = finishOf(chunks)?.reason
+    expect(reason).toMatchObject({ failure: { message: expect.stringContaining('未说明原因') as unknown } })
+    expect(JSON.stringify(reason)).not.toContain('let me start by')
   })
 })
 

@@ -41,10 +41,12 @@ export interface CliSessionOptions {
    */
   readonly onEfforts?: (model: string, effort: CliEffortList | undefined) => void
   /**
-   * Told the native modes the CLI reported, in the CLI's own ids and names. Kept per
-   * provider so switching CLIs never carries one CLI's modes over to another.
+   * Told the native modes a new CLI session starts with, in the CLI's own ids and names. Kept
+   * per provider so switching CLIs never carries one CLI's modes over to another.
    */
   readonly onModes?: (modes: CliModeList) => void
+  /** Told when the CLI would not take {@link initialMode}, which the session has then dropped. */
+  readonly onModeRefused?: (mode: string) => void
   /** Reads pasted images from the harness; absent when it has no attachment service. */
   readonly readImage?: ReadImage
   /** Receives failures that have no caller left to reject. */

@@ -18,7 +18,7 @@ import { LlmError } from '@deepseek-ai/dsh-llm'
 import type { RequestMessage, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { abortable } from './abortable.ts'
 import { AsyncQueue } from './async-queue.ts'
-import { readEffortList, readModelList } from './model-options.ts'
+import { readEffortList, readModeList, readModelList } from './model-options.ts'
 import type { CliEffortList, CliModeList } from './model-options.ts'
 import { nativeReplayState, readNativeSession, unseenUserInput } from './request-input.ts'
 import type { UserInput } from './request-input.ts'
@@ -80,7 +80,9 @@ export class CliSession {
     this.label = options.label
     this.startTimeoutMs = options.startTimeoutMs ?? DEFAULT_START_TIMEOUT_MS
     this.seen = options.sentMessageIds ?? new Set()
-    this.model = new ModelState(options.knownModels, (reported) => this.noteOptions(reported))
+    this.model = new ModelState(options.knownModels, (reported, isNewSession) =>
+      this.noteOptions(reported, isNewSession),
+    )
     this.effort = new EffortState((reported) => this.model.observe(reported))
     this.mode = new ModeState(
       () => options.knownModels?.()?.modes,
@@ -300,14 +302,23 @@ export class CliSession {
       })
     }
     // A mode picked before the CLI started has had no session to change until now.
-    await this.mode.apply({ transport, acpSessionId, label }, signal)
+    const refusal = await this.mode.settle({ transport, acpSessionId, label }, signal)
+    if (refusal !== undefined) {
+      this.events.push({ type: 'text', text: refusal.notice })
+      this.options.onModeRefused?.(refusal.mode)
+    }
   }
 
-  /** Every report of the CLI's options passes through the model state, and lands here. */
-  private noteOptions(options: ConfigOptions): void {
+  /**
+   * Every report of the CLI's options passes through the model state, and lands here. Only a
+   * new session's modes go to the catalog: it speaks for sessions with no CLI yet, which start
+   * where a new process does, not where this one was switched to.
+   */
+  private noteOptions(options: ConfigOptions, isNewSession: boolean): void {
     this.effort.observe(options)
-    const modes = this.mode.observe(options)
-    if (modes !== undefined) this.options.onModes?.(modes)
+    this.mode.observe(options)
+    const fresh = isNewSession ? readModeList(options) : undefined
+    if (fresh !== undefined) this.options.onModes?.(fresh)
     const model = readModelList(options)?.current
     if (model !== undefined) this.heldEfforts = new Map([...this.heldEfforts, [model, readEffortList(options)]])
   }

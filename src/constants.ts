@@ -27,6 +27,25 @@ export const cliRoute = (id: string): string => `${CLI_ROUTE_PREFIX}${id}`
  */
 export const isCliRoute = (provider: string | undefined): boolean => provider?.startsWith(CLI_ROUTE_PREFIX) ?? false
 
+/** A one-line menu row has room for a short numeric label, not a sentence of marketing copy. */
+const MAX_COMPACT_DESCRIPTION = 20
+/** A decimal point is not prose punctuation: it belongs to a cost multiplier like x0.00. */
+const PROSE_PUNCTUATION = /[,;:!?，。；：！？]/
+
+/**
+ * The part of a model's description the menu shows beside its name: a compact label such as
+ * CodeBuddy's `x0.29 credits`, which tells apart tiers that share a name. Sentences about what
+ * a model is good at are left out. The server side decides with the same rule whether such
+ * labels can tell same-named rows apart, so a row never relies on text the menu hides.
+ * @param description - what the CLI said about the model.
+ * @returns the label to show, or undefined when there is none worth showing.
+ */
+export function compactDescription(description: string | undefined): string | undefined {
+  const text = description?.trim() ?? ''
+  if (text.length === 0 || text.length > MAX_COMPACT_DESCRIPTION) return undefined
+  return PROSE_PUNCTUATION.test(text) || !/\d/.test(text) ? undefined : text
+}
+
 /** Model id meaning whatever the CLI itself is set to. */
 export const DEFAULT_MODEL_ID = 'default'
 

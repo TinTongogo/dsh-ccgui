@@ -41,10 +41,11 @@ describe('modelMarkOf', () => {
     expect(modelMarkOf({ provider, model, name })).toBe(mark)
   })
 
-  it('falls back to the WorkBuddy mark, never an aggregator CLI’s own logo', () => {
-    expect(modelMarkOf({ provider: 'cli-codebuddy', model: 'space-bunny', name: 'Space-Bunny' })).toBe('workbuddy')
-    expect(modelMarkOf({ provider: 'cli-opencode', model: 'big-pickle', name: 'Big Pickle' })).toBe('workbuddy')
-    expect(modelMarkOf({ provider: 'cli-someone-elses', model: 'x1', name: 'X1' })).toBe('workbuddy')
+  // A placeholder must not claim a maker either, so it is a neutral glyph, not a brand.
+  it('falls back to a neutral mark, never an aggregator CLI’s own logo or another brand', () => {
+    expect(modelMarkOf({ provider: 'cli-codebuddy', model: 'space-bunny', name: 'Space-Bunny' })).toBe('unknown')
+    expect(modelMarkOf({ provider: 'cli-opencode', model: 'big-pickle', name: 'Big Pickle' })).toBe('unknown')
+    expect(modelMarkOf({ provider: 'cli-someone-elses', model: 'x1', name: 'X1' })).toBe('unknown')
   })
 
   it('keeps a provider’s mark when the provider really is the model’s maker', () => {

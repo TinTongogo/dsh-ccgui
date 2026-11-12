@@ -6,7 +6,7 @@
  */
 
 import type { SessionConfigOption } from '@agentclientprotocol/sdk'
-import { DEFAULT_MODEL_ID } from './constants.ts'
+import { compactDescription, DEFAULT_MODEL_ID } from './constants.ts'
 
 /** One model a CLI offers. */
 export interface CliModelOption {
@@ -88,9 +88,9 @@ function readEntry(entry: unknown): readonly ReadEntry[] {
  * A CLI can list several models under one name, CodeBuddy's free and paid tiers of Hy4
  * among them, which would leave rows nobody can tell apart. Names stay exactly as the CLI
  * gave them: the menu shows each compact usage-cost label beside its name, and differing
- * labels are what tell those rows apart. Only when labels cannot do that do the ids join
- * the name. The default entry's description already names the model it stands for, so it
- * is not repeated beside the name.
+ * labels are what tell those rows apart. Only when labels cannot do that, including when the
+ * descriptions are prose the menu leaves out, do the ids join the name. The default entry's
+ * description already names the model it stands for, so it is not repeated beside the name.
  */
 function distinguishNames(entries: readonly ReadEntry[]): readonly CliModelOption[] {
   const named = entries.filter(({ value }) => value !== DEFAULT_MODEL_ID)
@@ -100,8 +100,9 @@ function distinguishNames(entries: readonly ReadEntry[]): readonly CliModelOptio
     if (value === DEFAULT_MODEL_ID) return { value, name }
     const peers = peersOf(name)
     if (peers.length < 2) return withDescription
-    const descriptions = new Set(peers.map((peer) => peer.description))
-    if (descriptions.size === peers.length && !descriptions.has(undefined)) return withDescription
+    // Judged by what the menu actually shows beside a name: prose is left out there.
+    const labels = new Set(peers.map((peer) => compactDescription(peer.description)))
+    if (labels.size === peers.length && !labels.has(undefined)) return withDescription
     return { ...withDescription, name: `${name}${NAME_SEPARATOR}${value}` }
   })
 }

@@ -2,21 +2,35 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import type * as Os from 'node:os'
 import { delimiter, join } from 'node:path'
-import { Readable } from 'node:stream'
-import type { IncomingMessage, ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import type { Message } from '@deepseek-ai/cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { GenerateOptions, LlmAdapter, StreamChunk } from '@deepseek-ai/dsh-llm'
-import type { Session, SessionEvent, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type { ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
-import type { ToolDefinition, ToolRegistrationOptions, ToolRunContext } from '@deepseek-ai/dsh-tools'
+import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
 import CliBridge from '../src/index.ts'
 import type { CliAgentConfig, Config } from '../src/index.ts'
 import { CLI_TOOL_NAME, DEFAULT_MODEL_ID } from '../src/constants.ts'
 import { collect, textOf, toolCallOf, user } from './fixtures/cli-session-helpers.ts'
-import { NodeSubprocess } from './fixtures/node-subprocess.ts'
+import {
+  BASE,
+  BROKEN,
+  FAKE,
+  FAKE_AGENT,
+  SILENT,
+  WAIT,
+  addAgent,
+  emitSessionEvent,
+  fake,
+  harness,
+  load,
+  onlyAdapter,
+  onlyTool,
+  openTurn,
+  request,
+  sid,
+  start,
+  stopStarted,
+  warnings,
+} from './fixtures/plugin-harness.ts'
 
 // The fallback probe directory lives under the user's home; point it at a scratch
 // directory so the suite never writes to the real one.
@@ -26,209 +40,11 @@ vi.mock('node:os', async (importOriginal) => {
   return { ...actual, homedir: () => home.dir }
 })
 
-const FAKE_AGENT = join(import.meta.dirname, 'fixtures', 'fake-acp-agent.mjs')
-const WAIT = { timeout: 10_000 }
-
-const FAKE: CliAgentConfig = { id: 'fake', name: 'Fake CLI', command: process.execPath, args: [FAKE_AGENT], env: {} }
-/** Never answers, so a probe of it stays in flight until it is aborted. */
-const SILENT: CliAgentConfig = {
-  id: 'silent',
-  name: 'Silent CLI',
-  command: process.execPath,
-  args: ['-e', 'setInterval(() => {}, 1000)'],
-  env: {},
-}
-/** Exits before speaking ACP, so starting it fails. */
-const BROKEN: CliAgentConfig = {
-  id: 'broken',
-  name: 'Broken CLI',
-  command: process.execPath,
-  args: ['-e', 'process.exit(2)'],
-  env: {},
-}
-
-/** Type a partial stand-in for a harness object; only the fields the plugin reads are set. */
-const fake = <T>(fields: Partial<T>): T => fields as T
-const sid = (id: string): SessionId => id as SessionId
-
-interface Registration {
-  readonly definition: ToolDefinition
-  readonly options: ToolRegistrationOptions | undefined
-}
-
-interface ReviewMock {
-  /** Providers the harness advertises besides the CLIs. */
-  providers: string[]
-  /** Models each of those providers advertises, in order. */
-  models: Record<string, string[]>
-  /** Providers whose model catalog cannot be read, to exercise the fallback. */
-  failModels: string[]
-  /** Requests the plugin forwarded to a stateless route. */
-  requests: GenerateOptions[]
-}
-
-interface Harness {
-  readonly root: Context
-  readonly subprocess: NodeSubprocess
-  readonly adapters: { providers: string[]; adapter: LlmAdapter }[]
-  readonly tools: Registration[]
-  readonly agents: Map<string, Agent>
-  readonly presets: Map<Context, string>
-  readonly logs: Message[]
-  readonly modelUpdates: string[]
-  readonly dshHome: string
-  readonly review: ReviewMock
-}
-
-const REVIEW_FINISH: StreamChunk = { type: 'finish', reason: { kind: 'stop' } }
-
-interface FakeAgent {
-  readonly agent: Agent
-  readonly select: ReturnType<typeof vi.fn>
-}
-
-function harness({ homePath = true }: { homePath?: boolean } = {}): Harness {
-  const root = new Context()
-  const subprocess = new NodeSubprocess()
-  const adapters: Harness['adapters'] = []
-  const tools: Registration[] = []
-  const agents = new Map<string, Agent>()
-  const presets = new Map<Context, string>()
-  const logs: Message[] = []
-  const modelUpdates: string[] = []
-  const review: ReviewMock = { providers: [], models: {}, failModels: [], requests: [] }
-  const dshHome = mkdtempSync(join(tmpdir(), 'ccgui-home-'))
-  root.logger.exporter({ export: (message) => logs.push(message) })
-  root.on('llm/models-updated', (provider) => modelUpdates.push(provider))
-  root.provide('llm', {
-    registerAdapter: (providers: string[], adapter: LlmAdapter) => {
-      adapters.push({ providers, adapter })
-      return () => undefined
-    },
-    listProviders: () => review.providers.map((id) => ({ id, name: id })),
-    listModels: (provider: string) =>
-      review.failModels.includes(provider)
-        ? Promise.reject(new Error('catalog unavailable'))
-        : Promise.resolve((review.models[provider] ?? []).map((id) => ({ provider, id, name: id }))),
-    stream: (options: GenerateOptions) => {
-      review.requests.push(options)
-      return (async function* (): AsyncGenerator<StreamChunk> {
-        yield REVIEW_FINISH
-      })()
-    },
-  })
-  root.provide('tools', {
-    register: (definition: ToolDefinition, options?: ToolRegistrationOptions) => {
-      tools.push({ definition, options })
-      return () => undefined
-    },
-  })
-  root.provide('agents', { get: (id: string) => agents.get(id) })
-  root.provide('subprocess', { spawn: subprocess.spawn.bind(subprocess) })
-  root.provide('agentPresets', { composedPreset: (ctx: Context) => presets.get(ctx) })
-  if (homePath) root.provide('dshHomePath', (...segments: string[]) => join(dshHome, ...segments))
-  return { root, subprocess, adapters, tools, agents, presets, logs, modelUpdates, dshHome, review }
-}
-
-function addAgent(
-  h: Harness,
-  { id = 'dsh-1', preset, cwd }: { id?: string; preset?: string; cwd?: string } = {},
-): FakeAgent {
-  const agentCtx = fake<Context>({})
-  if (preset !== undefined) h.presets.set(agentCtx, preset)
-  let current: { provider: string; model: string } | undefined
-  const select = vi.fn((selection: { provider: string; model: string }) => {
-    current = selection
-  })
-  const agent = fake<Agent>({
-    id: sid(id),
-    ctx: agentCtx,
-    session: fake<Session>({ header: fake<SessionHeader>({ cwd: cwd ?? mkdtempSync(join(tmpdir(), 'ccgui-')) }) }),
-    model: fake<Agent['model']>({ select, current: () => current }),
-  })
-  h.agents.set(id, agent)
-  return { agent, select }
-}
-
-const BASE: Config = {
-  agents: [FAKE],
-  disposeGraceMs: 200,
-  disposeEofGraceMs: 500,
-  cancelGraceMs: 200,
-  startTimeoutMs: 10_000,
-  reviewProvider: '',
-  reviewModel: '',
-}
-
-async function load(h: Harness, config: Partial<Config> = {}) {
-  const fiber = h.root.plugin(CliBridge, { ...BASE, ...config })
-  await fiber
-  return fiber
-}
-
-const warnings = (h: Harness): string[] =>
-  h.logs.filter((message) => message.type === 'warn').map((message) => String(message.args[0]))
-
-function onlyAdapter(h: Harness): LlmAdapter {
-  const [entry] = h.adapters
-  if (entry === undefined) throw new Error('no adapter registered')
-  return entry.adapter
-}
-
-function onlyTool(h: Harness): Registration {
-  const [entry] = h.tools
-  if (entry === undefined) throw new Error('no tool registered')
-  return entry
-}
-
-/** This SDK types `purpose` as always undefined; newer hosts do send it. */
-type RequestFields = Omit<Partial<GenerateOptions>, 'purpose'> & { purpose?: string }
-
-const request = (fields: RequestFields): GenerateOptions =>
-  Object.assign(
-    {},
-    fake<GenerateOptions>({
-      provider: 'cli-fake',
-      model: DEFAULT_MODEL_ID,
-      messages: [],
-      sessionId: sid('dsh-1'),
-    }),
-    fields,
-  )
-
-function emitSessionEvent(h: Harness, sessionId: string, event: { type: string; data?: unknown }): void {
-  h.root.emit('session/event', fake<Session>({ id: sid(sessionId) }), event as SessionEvent)
-}
-
-/** Mark `ids` as the open turn's new user messages, as the harness log would. */
-function openTurn(h: Harness, sessionId: string, ids: readonly string[]): void {
-  emitSessionEvent(h, sessionId, { type: 'turn/start' })
-  for (const id of ids) emitSessionEvent(h, sessionId, { type: 'user/message', data: { id } })
-}
-
-let disposers: (() => Promise<void>)[] = []
-
 beforeEach(() => {
   home.dir = mkdtempSync(join(tmpdir(), 'ccgui-user-'))
 })
 
-afterEach(async () => {
-  await Promise.all(disposers.map((dispose) => dispose()))
-  disposers = []
-})
-
-/** Load the plugin and make sure its processes are gone after the test. */
-async function start(h: Harness, config: Partial<Config> = {}) {
-  const fiber = await load(h, config)
-  disposers = [
-    ...disposers,
-    async () => {
-      await fiber.dispose()
-      await h.subprocess.allExited()
-    },
-  ]
-  return fiber
-}
+afterEach(stopStarted)
 
 /** Validate a raw config the way cordis does before constructing the plugin. */
 function validate(input: unknown): { value?: unknown; issues?: readonly unknown[] } {
@@ -503,95 +319,6 @@ describe('CliBridge routing and model listing', () => {
   })
 })
 
-describe('CliBridge auto-review routing', () => {
-  // Reviewer calls arrive stamped with the main agent's CLI route. They must reach
-  // a stateless model with the policy intact, never a `session/prompt` in the CLI.
-  it('forwards the reviewer to the first non-CLI provider with its request intact', async () => {
-    const h = harness()
-    h.review.providers = ['cli-fake', 'deepseek']
-    h.review.models = { deepseek: ['deepseek-chat'] }
-    await start(h)
-    const options = request({
-      purpose: 'auto-review',
-      system: 'REVIEW_POLICY',
-      temperature: 0,
-      messages: [user('m1', 'history')],
-    })
-    await expect(collect(onlyAdapter(h).stream(options))).resolves.toEqual([REVIEW_FINISH])
-    expect(h.review.requests).toHaveLength(1)
-    expect(h.review.requests[0]).toMatchObject({
-      provider: 'deepseek',
-      model: 'deepseek-chat',
-      system: 'REVIEW_POLICY',
-      temperature: 0,
-      purpose: 'auto-review',
-    })
-    expect(h.subprocess.spawned).toEqual([])
-  })
-
-  it('uses the configured review route instead of discovering one', async () => {
-    const h = harness()
-    h.review.providers = ['deepseek']
-    h.review.models = { deepseek: ['deepseek-chat'] }
-    await start(h, { reviewProvider: 'configured', reviewModel: 'reviewer' })
-    const options = request({ purpose: 'auto-review' })
-    await collect(onlyAdapter(h).stream(options))
-    expect(h.review.requests[0]).toMatchObject({ provider: 'configured', model: 'reviewer' })
-  })
-
-  // A provider whose catalog cannot be read must not sink the whole discovery loop.
-  it('skips a provider whose model catalog cannot be read', async () => {
-    const h = harness()
-    h.review.providers = ['cli-fake', 'broken', 'deepseek']
-    h.review.models = { deepseek: ['deepseek-chat'] }
-    h.review.failModels = ['broken']
-    await start(h)
-    const options = request({ purpose: 'auto-review' })
-    await expect(collect(onlyAdapter(h).stream(options))).resolves.toEqual([REVIEW_FINISH])
-    expect(h.review.requests[0]).toMatchObject({ provider: 'deepseek', model: 'deepseek-chat' })
-    expect(warnings(h).some((text) => text.includes('could not list models for broken'))).toBe(true)
-    expect(h.subprocess.spawned).toEqual([])
-  })
-
-  it('reports a missing route when the configured provider cannot list models', async () => {
-    const h = harness()
-    h.review.failModels = ['configured']
-    await start(h, { reviewProvider: 'configured' })
-    const options = request({ purpose: 'auto-review' })
-    await expect(collect(onlyAdapter(h).stream(options))).rejects.toMatchObject({
-      code: 'UNSUPPORTED_OPTION',
-      message: /审查模型/,
-    })
-    expect(warnings(h).some((text) => text.includes('could not list models for configured'))).toBe(true)
-    expect(h.subprocess.spawned).toEqual([])
-  })
-
-  it('reports a missing review route instead of sending it to the CLI', async () => {
-    const h = harness()
-    await start(h)
-    const options = request({ purpose: 'auto-review' })
-    await expect(collect(onlyAdapter(h).stream(options))).rejects.toMatchObject({
-      code: 'UNSUPPORTED_OPTION',
-      message: /审查模型/,
-    })
-    expect(h.subprocess.spawned).toEqual([])
-  })
-
-  // A harness permission preset is not a CLI mode: the CLI still starts and runs its
-  // own turn, and its native modes decide whether it asks for permission at all.
-  it.each(['auto', 'danger-full-access'])('runs a CLI turn after a %s preset event', async (preset) => {
-    const h = harness()
-    h.review.providers = ['deepseek']
-    h.review.models = { deepseek: ['deepseek-chat'] }
-    await start(h)
-    addAgent(h)
-    emitSessionEvent(h, 'dsh-1', { type: 'permission/preset', data: { preset } })
-    openTurn(h, 'dsh-1', ['m1'])
-    await expect(collect(onlyAdapter(h).stream(request({ messages: [user('m1', 'hello')] })))).resolves.toBeDefined()
-    expect(h.subprocess.spawned).toHaveLength(1)
-  })
-})
-
 describe('CliBridge sessions', () => {
   it('runs a turn on the CLI in the session directory, with the turn read from the log', async () => {
     const h = harness()
@@ -668,16 +395,17 @@ describe('CliBridge sessions', () => {
 
   // The access mode is DSH's stance for sessions it runs. A CLI decides for itself whether
   // to ask, so its question must not be answered by that stance without asking anyone.
-  it('lifts a never-ask stance before asking, so the CLI question still reaches someone', async () => {
+  it('lifts a never-ask stance while the CLI asks, then restores it', async () => {
     const h = harness()
     const order: string[] = []
+    let stance: 'ask' | 'never' = 'never'
     const approval = {
       overrideOf: vi.fn(() => {
-        order.push('overrideOf')
-        return 'never' as const
+        order.push(`overrideOf:${stance}`)
+        return stance
       }),
       request: vi.fn((_request: ApprovalRequest) => {
-        order.push('request')
+        order.push(`request:${stance}`)
         return Promise.resolve('allowed-once' as const)
       }),
     }
@@ -686,7 +414,9 @@ describe('CliBridge sessions', () => {
     const cwd = mkdtempSync(join(tmpdir(), 'ccgui-cwd-'))
     const { agent } = addAgent(h, { cwd })
     const session = agent.session as unknown as { append: (type: string, data: unknown) => void }
-    session.append = vi.fn()
+    session.append = vi.fn((_type: string, data: unknown) => {
+      stance = (data as { policy: 'ask' | 'never' }).policy
+    })
     openTurn(h, 'dsh-1', ['m1'])
     const chunks = await collect(onlyAdapter(h).stream(request({ messages: [user('m1', 'WRITE out.txt')] })))
     const call = toolCallOf(chunks)
@@ -697,8 +427,11 @@ describe('CliBridge sessions', () => {
     })
     const result = (await onlyTool(h).definition.execute(call.args, exec)) as { text: string }
     expect(result.text).toContain('Created')
-    expect(order).toEqual(['overrideOf', 'request'])
-    expect(session.append).toHaveBeenCalledWith('approval/policy', { policy: 'ask' })
+    expect(order).toEqual(['overrideOf:never', 'request:ask', 'overrideOf:ask'])
+    expect(vi.mocked(session.append).mock.calls).toEqual([
+      ['approval/policy', { policy: 'ask' }],
+      ['approval/policy', { policy: 'never' }],
+    ])
   })
 
   it('treats a missing approval service as unavailable and does not write', async () => {
@@ -816,62 +549,6 @@ describe('CliBridge in PTC mode', () => {
     const stream = onlyAdapter(h).stream(request({ messages: [user('m1', 'hello')] }))
     await expect(collect(stream)).rejects.toMatchObject({ code: 'CLI_WRONG_PRESET' })
     expect(h.subprocess.spawned).toEqual([])
-  })
-})
-
-describe('CliBridge mode route', () => {
-  interface Route {
-    readonly kind: string
-    readonly path: string
-    handler(req: IncomingMessage, res: ServerResponse): Promise<void>
-  }
-
-  function requestOf(body: unknown): IncomingMessage {
-    return Object.assign(Readable.from([Buffer.from(JSON.stringify(body))]), {
-      method: 'POST',
-      headers: {},
-      url: '/dsh-ccgui/modes',
-    }) as unknown as IncomingMessage
-  }
-
-  function responseOf(): { res: ServerResponse; answer: () => Record<string, unknown> } {
-    let body = ''
-    const res = {
-      writeHead: () => undefined,
-      end: (chunk?: string) => {
-        body = chunk ?? ''
-      },
-    } as unknown as ServerResponse
-    return { res, answer: () => JSON.parse(body) as Record<string, unknown> }
-  }
-
-  it('serves the CLI mode route beside the git routes, and answers for a CLI with no modes yet', async () => {
-    const h = harness()
-    const routes: Route[] = []
-    const dispose = vi.fn()
-    const fiber = await load(h)
-    h.root.provide('webServer', {
-      register: (route: Route) => {
-        routes.push(route)
-        return dispose
-      },
-    })
-    h.root.provide('connection', { requestRejection: () => undefined })
-    await vi.waitFor(() => {
-      expect(routes.map((route) => route.path)).toEqual(['/dsh-ccgui/git', '/dsh-ccgui/modes'])
-    })
-    const modes = routes[1] as Route
-
-    const read = responseOf()
-    await modes.handler(requestOf({ sessionId: 'dsh-1', provider: 'cli-fake' }), read.res)
-    expect(read.answer()).toEqual({ success: true, data: { modes: null, pending: null } })
-
-    const write = responseOf()
-    await modes.handler(requestOf({ sessionId: 'dsh-1', provider: 'cli-fake', mode: 'plan' }), write.res)
-    expect(write.answer()).toEqual({ success: true, data: { modes: null, pending: 'plan' } })
-
-    await fiber.dispose()
-    expect(dispose).toHaveBeenCalled()
   })
 })
 

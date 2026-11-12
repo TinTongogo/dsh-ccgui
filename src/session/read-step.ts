@@ -40,16 +40,14 @@ export interface StepSource {
  */
 export async function* readStep(source: StepSource, signal: AbortSignal | undefined): AsyncGenerator<StreamChunk> {
   let blocks = EMPTY_BLOCKS
-  // A refusal's reason arrives as ordinary text; keep it so the finish can name it.
+  // A refusal's reason arrives as ordinary text; keep it so the finish can name it. Thinking
+  // is left out: it is the model's working, already shown, and no explanation of a refusal.
   let text = ''
-  let reasoning = ''
   while (source.hasWork()) {
     const event = await source.nextEvent(signal)
     if (event.type === 'text') text += event.text
-    if (event.type === 'reasoning') reasoning += event.text
     if (source.owesInput() && event.type === 'turn-end') continue
-    const detail = text.trim() === '' ? reasoning : text
-    const step = applyEvent(source, blocks, event, detail)
+    const step = applyEvent(source, blocks, event, text)
     blocks = step.state
     yield* step.chunks
     if (step.done) return

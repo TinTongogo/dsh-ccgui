@@ -131,6 +131,11 @@ await scenario('approvals: a 完全权限 session still lets the CLI ask', async
   await untilText('done')
   await idle('WRITE full.txt')
   if (!existsSync(inWorkspace('full.txt'))) throw new Error('missing after approval')
+  // The stance is the user's setting: lifted only while the CLI asked, then put back.
+  const policies = sessionEvents('WRITE full.txt')
+    .filter((event) => event.type === 'approval/policy')
+    .map((event) => event.data.policy)
+  if (policies.slice(-2).join() !== 'ask,never') throw new Error(`access mode not restored: ${policies.join()}`)
   await shot('full-access-asked')
 })
 
@@ -274,13 +279,13 @@ await scenario("flat menu: one click shows only this CLI's models, with no secon
 })
 
 // A CLI's own logo names the CLI, not the maker of every model it happens to list.
-await scenario('model marks: an unidentifiable model gets the WorkBuddy mark, never a brand', async () => {
+await scenario('model marks: an unidentifiable model gets a neutral mark, never a brand', async () => {
   await modelTrigger().click()
   await sleep(300)
   const marks = await page
     .getByRole('menuitemradio')
     .evaluateAll((rows) => rows.map((row) => row.querySelector('[data-cli-mark]')?.getAttribute('data-cli-mark')))
-  if (marks.join() !== 'workbuddy,workbuddy') throw new Error(`model marks: ${marks.join()}`)
+  if (marks.join() !== 'unknown,unknown') throw new Error(`model marks: ${marks.join()}`)
   await page.keyboard.press('Escape')
   await sleep(250)
 })

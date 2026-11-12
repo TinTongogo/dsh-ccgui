@@ -374,6 +374,29 @@ describe('native modes', () => {
     expect(registry.modeStateFor('dsh-1', 'cli-x')).toEqual({})
   })
 
+  // The session tells the registry when the CLI would not take a pick made before it
+  // started; a replacement must not start on it again.
+  it('forgets a pick the CLI refused at its first step', async () => {
+    const { deps, registry } = setup({ createSession: vi.fn(() => fakeSession({ replaceable: true })) })
+    await registry.switchMode('dsh-1', 'cli-x', 'plan')
+    registry.resolveSession('cli-x', 'dsh-1')
+    const start = vi.mocked(deps.createSession).mock.calls[0]?.[3]
+    start?.onModeRefused?.('plan')
+    registry.resolveSession('cli-x', 'dsh-1')
+    expect(vi.mocked(deps.createSession).mock.calls[1]?.[3]).not.toHaveProperty('initialMode')
+  })
+
+  it('keeps a newer pick when an older one is refused', async () => {
+    const { deps, registry } = setup({ createSession: vi.fn(() => fakeSession({ replaceable: true })) })
+    await registry.switchMode('dsh-1', 'cli-x', 'plan')
+    registry.resolveSession('cli-x', 'dsh-1')
+    const start = vi.mocked(deps.createSession).mock.calls[0]?.[3]
+    await registry.switchMode('dsh-1', 'cli-x', 'acceptEdits')
+    start?.onModeRefused?.('plan')
+    registry.resolveSession('cli-x', 'dsh-1')
+    expect(vi.mocked(deps.createSession).mock.calls[1]?.[3]).toMatchObject({ initialMode: 'acceptEdits' })
+  })
+
   it('forgets a pick with its session', async () => {
     const { registry } = setup()
     await registry.switchMode('dsh-1', 'cli-x', 'plan')

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionConfigOption } from '@agentclientprotocol/sdk'
 import type { CliModeList, CliModelList } from '../src/model-options.ts'
-import { collect, setupWith, user } from './fixtures/cli-session-helpers.ts'
+import { collect, finishOf, setupWith, textOf, user } from './fixtures/cli-session-helpers.ts'
 
 const modelOption: SessionConfigOption = {
   id: 'model',
@@ -95,7 +95,20 @@ describe('CliSession switching mode', () => {
     fake.setConfigResult = [{ ...modeOption, currentValue: 'plan' }]
     await expect(session.switchMode('plan')).resolves.toMatchObject({ current: 'plan' })
     expect(fake.setConfigCalls).toEqual([{ sessionId: 'acp-1', configId: 'permission_mode', value: 'plan' }])
-    expect(onModes).toHaveBeenLastCalledWith(expect.objectContaining({ current: 'plan' }))
+    expect(session.modes).toMatchObject({ current: 'plan' })
+  })
+
+  // The catalog speaks for sessions that have no CLI yet, and a new process starts in the
+  // CLI's own default. A switch in one session must not make another look switched.
+  it('tells the catalog the mode a new session starts in, not a later switch', async () => {
+    const onModes = vi.fn((_modes: CliModeList) => {})
+    const { fake, session } = setupWith({ onModes }, end)
+    fake.configOptions = [modelOption, modeOption]
+    await collect(session.stream({ messages: [user('1', 'hi')] }))
+    fake.setConfigResult = [{ ...modeOption, currentValue: 'plan' }]
+    await session.switchMode('plan')
+    expect(onModes).toHaveBeenCalledTimes(1)
+    expect(onModes).toHaveBeenLastCalledWith(expect.objectContaining({ current: 'acceptEdits' }))
   })
 
   it('leaves the CLI alone when it is already on that mode', async () => {
@@ -160,5 +173,68 @@ describe('CliSession switching mode', () => {
     await collect(session.stream({ messages: [user('1', 'hi')] }))
     fake.setConfigError = new Error('broken pipe')
     await expect(session.switchMode('plan')).rejects.toThrow(/OpenCode 无法切换到模式 plan：broken pipe/)
+  })
+})
+
+// A pick the CLI will not take must not hold the conversation hostage: the message still
+// goes out, in the mode the CLI is actually in, and the user is told why.
+describe('CliSession refused mode', () => {
+  const known: CliModelList = {
+    configId: 'model',
+    current: 'small',
+    options: [{ value: 'small', name: 'Small' }],
+    modes: {
+      configId: 'permission_mode',
+      current: 'acceptEdits',
+      options: [
+        { value: 'acceptEdits', name: 'Accept edits' },
+        { value: 'plan', name: 'Plan' },
+      ],
+    },
+  }
+
+  it('sends the first message anyway when the CLI refuses the mode picked before it started', async () => {
+    const onModeRefused = vi.fn((_mode: string) => {})
+    const { fake, session } = setupWith({ knownModels: () => known, initialMode: 'plan', onModeRefused }, end)
+    fake.configOptions = [modelOption, modeOption]
+    fake.setConfigError = new Error('plan is not allowed here')
+    const chunks = await collect(session.stream({ messages: [user('1', 'hi')] }))
+    expect(textOf(chunks)).toContain('无法切换到模式 plan')
+    expect(textOf(chunks)).toContain('plan is not allowed here')
+    expect(finishOf(chunks)?.reason.kind).toBe('stop')
+    expect(fake.prompts).toHaveLength(1)
+    expect(session.pendingMode).toBeUndefined()
+    expect(onModeRefused).toHaveBeenCalledWith('plan')
+  })
+
+  it('does not try a refused mode again with the next message', async () => {
+    const { fake, session } = setupWith({ knownModels: () => known, initialMode: 'plan' }, end, end)
+    fake.configOptions = [modelOption, modeOption]
+    fake.setConfigError = new Error('no')
+    await collect(session.stream({ messages: [user('1', 'hi')] }))
+    await collect(session.stream({ messages: [user('1', 'hi'), user('2', 'again')] }))
+    expect(fake.setConfigCalls).toHaveLength(1)
+  })
+
+  it('drops a pick the started CLI does not offer, without sending it', async () => {
+    const onModeRefused = vi.fn((_mode: string) => {})
+    const { fake, session } = setupWith({ knownModels: () => known, initialMode: 'yolo', onModeRefused }, end)
+    fake.configOptions = [modelOption, modeOption]
+    const chunks = await collect(session.stream({ messages: [user('1', 'hi')] }))
+    expect(fake.setConfigCalls).toEqual([])
+    expect(textOf(chunks)).toContain('无法切换到模式 yolo')
+    expect(onModeRefused).toHaveBeenCalledWith('yolo')
+    expect(session.pendingMode).toBeUndefined()
+  })
+
+  it('forgets a live switch the CLI refused, so the next message does not retry it', async () => {
+    const { fake, session } = setupWith({}, end, end)
+    fake.configOptions = [modelOption, modeOption]
+    await collect(session.stream({ messages: [user('1', 'hi')] }))
+    fake.setConfigResult = [modeOption]
+    await expect(session.switchMode('plan')).rejects.toMatchObject({ code: 'CLI_MODE_FAILED' })
+    expect(session.pendingMode).toBeUndefined()
+    await collect(session.stream({ messages: [user('1', 'hi'), user('2', 'again')] }))
+    expect(fake.setConfigCalls).toHaveLength(1)
   })
 })

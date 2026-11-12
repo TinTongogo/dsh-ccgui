@@ -74,7 +74,7 @@ describe('MarkGlyph', () => {
     ['minimax', 'url(#'],
     ['stepfun', 'currentColor'],
     ['xiaomi', '#FF6900'],
-    ['workbuddy', '#0EC7A8'],
+    ['unknown', 'currentColor'],
   ] as const)('draws the %s model mark', (id, paint) => {
     const svg = render(<MarkGlyph id={id} size={14} />).container.querySelector('svg')
     expect(svg?.getAttribute('data-cli-mark')).toBe(id)
@@ -82,9 +82,8 @@ describe('MarkGlyph', () => {
     expect(svg?.outerHTML).toContain(paint)
   })
 
-  // Several gradient marks on one page must each paint with their own defs. The WorkBuddy
-  // mark also carries a clip path, whose id has to be per instance too.
-  it.each(['minimax', 'workbuddy'] as const)('gives every %s mark its own defs', (id) => {
+  // Several gradient marks on one page must each paint with their own defs.
+  it.each(['minimax'] as const)('gives every %s mark its own defs', (id) => {
     const { container } = render(
       <>
         <MarkGlyph id={id} size={14} />

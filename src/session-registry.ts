@@ -36,6 +36,8 @@ export interface SessionStart {
   readonly after: Promise<void>
   /** A native mode picked before this session existed, for the same CLI. */
   readonly initialMode?: string
+  /** Told when the CLI would not take that mode, so no replacement starts on it again. */
+  readonly onModeRefused?: (mode: string) => void
 }
 
 /** The harness facilities the registry uses. */
@@ -209,7 +211,7 @@ export class CliSessionRegistry {
       return await live.session.switchMode(mode)
     } catch (error: unknown) {
       // The CLI refused the change, so the pick must not resurface with a later step.
-      this.pickedModes = without(this.pickedModes, sessionId)
+      this.forgetPick(sessionId, mode)
       throw error
     }
   }
@@ -298,9 +300,15 @@ export class CliSessionRegistry {
   }
 
   /** A mode picked before the CLI started, if it was picked for this route. */
-  private startMode(sessionId: string, provider: string): { initialMode?: string } {
+  private startMode(sessionId: string, provider: string): Pick<SessionStart, 'initialMode' | 'onModeRefused'> {
     const picked = this.pickedModes.get(sessionId)
-    return picked?.provider === provider ? { initialMode: picked.mode } : {}
+    if (picked?.provider !== provider) return {}
+    return { initialMode: picked.mode, onModeRefused: (mode) => this.forgetPick(sessionId, mode) }
+  }
+
+  /** Drop a refused pick, unless the user has picked another since. */
+  private forgetPick(sessionId: string, mode: string): void {
+    if (this.pickedModes.get(sessionId)?.mode === mode) this.pickedModes = without(this.pickedModes, sessionId)
   }
 
   private recordTurnMessage(sessionId: string, id: unknown): void {

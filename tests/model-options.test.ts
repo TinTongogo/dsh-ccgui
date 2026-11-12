@@ -104,6 +104,19 @@ describe('readModelList', () => {
     ])
   })
 
+  // The menu shows only a compact label beside a name and leaves prose out, so prose cannot
+  // be what tells two rows apart: they would read the same. The ids have to do it.
+  it('falls back to the ids when the descriptions are prose the menu leaves out', () => {
+    const options = [
+      { value: 'hy4-free', name: 'Hy4', description: 'Free tier, limited quota' },
+      { value: 'hy4', name: 'Hy4', description: 'Stronger agentic coding' },
+    ]
+    expect(readModelList([select({ category: 'model', currentValue: 'hy4', options })])?.options).toEqual([
+      { value: 'hy4-free', name: 'Hy4 · hy4-free', description: 'Free tier, limited quota' },
+      { value: 'hy4', name: 'Hy4 · hy4', description: 'Stronger agentic coding' },
+    ])
+  })
+
   // The menu labels the default entry on its own, so sharing a name with its model is expected.
   it('leaves a default entry that names the model it stands for', () => {
     const options = [
