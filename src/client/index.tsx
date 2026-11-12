@@ -362,7 +362,7 @@ function registerComposerSlots(ctx: ClientContext, cliPrefs: CliPrefs): void {
 /**
  * Put the CLI's own mode beside the switcher. A harness session renders nothing here: its
  * access control keeps the composer's permission seat, and the styles hide that control
- * while this seat is present.
+ * only while the CLI's mode control shows.
  * @param ctx - the plugin's client context.
  */
 function registerModeSeat(ctx: ClientContext): void {

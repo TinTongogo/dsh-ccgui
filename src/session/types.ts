@@ -76,6 +76,11 @@ export interface StreamRequest {
 
 /** What the step reader consumes, in the order it happened. */
 export type SessionEvent =
-  | { readonly type: 'text' | 'reasoning'; readonly text: string }
+  | {
+      readonly type: 'text' | 'reasoning'
+      readonly text: string
+      /** Written by this plugin, not the CLI, so it never explains why the CLI refused. */
+      readonly notice?: true
+    }
   | { readonly type: 'tool-ready'; readonly acpId: string }
   | TurnEnd

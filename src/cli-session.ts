@@ -298,13 +298,14 @@ export class CliSession {
     if (kept !== undefined && reasoningEffort !== undefined) {
       this.events.push({
         type: 'text',
+        notice: true,
         text: `（${label} 当前模型不支持思考强度 ${reasoningEffort}，沿用 CLI 的 ${kept}。请在菜单里重新选择。）\n\n`,
       })
     }
     // A mode picked before the CLI started has had no session to change until now.
     const refusal = await this.mode.settle({ transport, acpSessionId, label }, signal)
     if (refusal !== undefined) {
-      this.events.push({ type: 'text', text: refusal.notice })
+      this.events.push({ type: 'text', notice: true, text: refusal.notice })
       this.options.onModeRefused?.(refusal.mode)
     }
   }
@@ -394,6 +395,7 @@ export class CliSession {
   private pushFreshSessionNotice(): void {
     this.events.push({
       type: 'text',
+      notice: true,
       text: `（${this.label} 无法恢复之前的会话，已开始新会话，它不记得之前的内容。）\n\n`,
     })
   }

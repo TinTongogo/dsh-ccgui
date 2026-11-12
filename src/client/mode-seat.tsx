@@ -4,7 +4,7 @@
  * The CLI's own mode, in the seat beside the CLI switcher: it belongs to that CLI session,
  * so it reads next to the CLI's name rather than next to the harness's access control. A
  * session the harness runs renders nothing here — its access control keeps the composer's
- * permission seat, and the styles hide that control while this one is present.
+ * permission seat, and the styles hide that control only while the CLI's mode control shows.
  * @module dsh-ccgui/client/mode-seat
  */
 

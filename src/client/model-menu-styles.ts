@@ -180,9 +180,10 @@ export const MODEL_MENU_STYLES = `
 .${MODE_CLASS} { display: var(--dsh-composer-model-text-display, block); flex: 0 0 auto; }
 .${MODE_CLASS} .${TRIGGER_CLASS} { padding: 0 4px; color: var(--dsw-alias-label-caption); }
 /* The permission seat holds one control: on a CLI session that is the CLI's own mode, so
-   the harness's access control steps aside. Its own seat keeps it on every other session. */
+   the harness's access control steps aside. It keys on the mode control itself, not its seat:
+   a CLI that reports no modes leaves the seat empty, and the access control must then stay. */
 .${MODE_SEAT_CLASS} { display: inline-flex; min-width: 0; }
 .${MODE_SEAT_CLASS} .${TRIGGER_CLASS} { padding: 0 4px 0 8px; color: var(--dsw-alias-label-secondary); }
-[data-composer-card]:has(.${MODE_SEAT_CLASS}) [aria-label^="访问模式"] { display: none !important; }
+[data-composer-card]:has(.${MODE_CLASS}) [aria-label^="访问模式"] { display: none !important; }
 .${HINT_CLASS} { padding: 8px; color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 18px; }
 `

@@ -42,10 +42,11 @@ export async function* readStep(source: StepSource, signal: AbortSignal | undefi
   let blocks = EMPTY_BLOCKS
   // A refusal's reason arrives as ordinary text; keep it so the finish can name it. Thinking
   // is left out: it is the model's working, already shown, and no explanation of a refusal.
+  // So are this plugin's own notices, which would hide the reason the CLI attached.
   let text = ''
   while (source.hasWork()) {
     const event = await source.nextEvent(signal)
-    if (event.type === 'text') text += event.text
+    if (event.type === 'text' && event.notice !== true) text += event.text
     if (source.owesInput() && event.type === 'turn-end') continue
     const step = applyEvent(source, blocks, event, text)
     blocks = step.state

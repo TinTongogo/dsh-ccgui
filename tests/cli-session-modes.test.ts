@@ -227,6 +227,23 @@ describe('CliSession refused mode', () => {
     expect(session.pendingMode).toBeUndefined()
   })
 
+  // The notice is the plugin's own words, so a refusal in the same turn must still be
+  // explained by the CLI, here through the reason it attached to its answer.
+  it('does not give its own notice as the reason the CLI refused', async () => {
+    const quota = '{"message":"Quota exceeded: 429","data":{"details":"免费额度已用完，请明天再试"}}'
+    const { fake, session } = setupWith({ knownModels: () => known, initialMode: 'plan' }, () => ({
+      stopReason: 'refusal' as const,
+      meta: { 'codebuddy.ai/errorMessage': quota },
+    }))
+    fake.configOptions = [modelOption, modeOption]
+    fake.setConfigError = new Error('plan is not allowed here')
+    const finish = finishOf(await collect(session.stream({ messages: [user('1', 'hi')] })))
+    expect(finish?.reason).toMatchObject({ kind: 'error', failure: { code: 'CLI_REFUSAL' } })
+    const message = finish?.reason.kind === 'error' ? finish.reason.failure.message : ''
+    expect(message).toContain('免费额度已用完')
+    expect(message).not.toContain('无法切换到模式')
+  })
+
   it('forgets a live switch the CLI refused, so the next message does not retry it', async () => {
     const { fake, session } = setupWith({}, end, end)
     fake.configOptions = [modelOption, modeOption]

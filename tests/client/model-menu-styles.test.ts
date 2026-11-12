@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { CLI_ROUTE_PREFIX } from '../../src/constants.ts'
-import { MODEL_MENU_STYLES, ROWS_CLASS } from '../../src/client/model-menu-styles.ts'
+import { MODE_CLASS, MODE_SEAT_CLASS, MODEL_MENU_STYLES, ROWS_CLASS } from '../../src/client/model-menu-styles.ts'
 
 const HARNESS_MENU = `
 <div id="harness" role="menu" aria-label="模型">
@@ -63,5 +63,28 @@ describe('the harness model seat on a non-CLI session', () => {
   it("keeps the plugin's own menu visible", () => {
     installStyles()
     expect(displayOf('plugin')).not.toBe('none')
+  })
+})
+
+// The access control only steps aside for a mode control that is really there: a CLI that
+// reports no modes leaves its seat empty, and the harness's control must stay usable.
+describe('the access control on a CLI session', () => {
+  const composer = (seat: string): void => {
+    document.head.innerHTML = `<style>${MODEL_MENU_STYLES}</style>`
+    document.body.innerHTML = `
+<div data-composer-card>
+  <span class="${MODE_SEAT_CLASS}">${seat}</span>
+  <button id="access" type="button" aria-label="访问模式：完全权限">完全权限</button>
+</div>`
+  }
+
+  it('stays when the CLI reports no modes', () => {
+    composer('')
+    expect(displayOf('access')).not.toBe('none')
+  })
+
+  it("steps aside for the CLI's mode control", () => {
+    composer(`<span class="${MODE_CLASS}"><button type="button">Plan</button></span>`)
+    expect(displayOf('access')).toBe('none')
   })
 })
